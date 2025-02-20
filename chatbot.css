@@ -218,14 +218,48 @@ code {
     transform: scale(1.1);
 }
 
-/* Add these new styles */
+/* Update header styles */
 .chatbot-header {
     display: flex;
-    justify-content: flex-end;
-    gap: 10px;
+    justify-content: space-between;
+    align-items: center;
     margin-bottom: 15px;
 }
 
+.chatbot-controls {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.icon-button {
+    background: transparent;
+    border: none;
+    color: #666;
+    font-size: 20px;
+    cursor: pointer;
+    padding: 5px;
+    border-radius: 50%;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+}
+
+.icon-button:hover {
+    background: #f0f0f0;
+    color: #333;
+    transform: scale(1.1);
+}
+
+.icon-button.active {
+    background: #e3f2fd;
+    color: #0073aa;
+}
+
+/* Add these new styles */
 #clear-chat {
     background: transparent;
     border: none;
@@ -281,4 +315,61 @@ code {
     #chatbot-container.minimized {
         transform: translateY(100%);
     }
+}
+
+/* Context toggle styles */
+.context-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    color: #666;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+    transition: all 0.3s ease;
+    background: #f8f8f8;
+    border: 1px solid #ddd;
+}
+
+.context-toggle:hover {
+    background: #f0f0f0;
+    border-color: #ccc;
+}
+
+.context-toggle input[type="checkbox"] {
+    margin: 0;
+    cursor: pointer;
+    width: 16px;
+    height: 16px;
+}
+
+.context-toggle span {
+    user-select: none;
+    white-space: nowrap;
+}
+
+/* Remove old context button styles */
+.icon-button[title^="Toggle Page Context"] {
+    display: none;
+}
+
+.context-toggle.disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.context-toggle.disabled input[type="checkbox"] {
+    cursor: not-allowed;
+}
+
+.context-toggle .context-notice {
+    font-size: 12px;
+    color: #999;
+    font-style: italic;
+}
+
+.context-toggle.disabled:hover {
+    background: none;
+    border-color: #ddd;
 }

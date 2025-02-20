@@ -3,7 +3,7 @@
  * Plugin Name: Multi-LLM Chatbot
  * Plugin URI: https://github.com/yakari/wordpress-multi-llm-chatbot
  * Description: Plugin WordPress pour intégrer un chatbot compatible avec OpenAI, Claude, Perplexity, Google Gemini et Mistral.
- * Version: 1.17.0
+ * Version: 1.23.0
  * Author: Yann Poirier <yakari@yakablog.info>
  * Author URI: https://foliesenbaie.fr
  * License: Apache-2.0
@@ -46,6 +46,13 @@ class MultiLLMChatbot {
         // Core settings
         register_setting('multi_llm_chatbot_settings', 'chatbot_provider');
         register_setting('multi_llm_chatbot_settings', 'chatbot_visibility');
+        register_setting('multi_llm_chatbot_settings', 'chatbot_use_context', [
+            'type' => 'boolean',
+            'default' => false,
+            'sanitize_callback' => function($value) {
+                return $value ? '1' : '0';
+            }
+        ]);
         
         // Provider-specific settings
         $providers = ['openai', 'claude', 'perplexity', 'gemini', 'mistral'];
@@ -162,6 +169,21 @@ class MultiLLMChatbot {
                                 <option value="gemini" <?php selected($current_provider, 'gemini'); ?>>Google Gemini</option>
                                 <option value="mistral" <?php selected($current_provider, 'mistral'); ?>>Mistral</option>
                             </select>
+                        </td>
+                    </tr>
+
+                    <!-- Context Awareness Setting -->
+                    <tr>
+                        <th scope="row">Contexte</th>
+                        <td>
+                            <label>
+                                <input type="checkbox" 
+                                       name="chatbot_use_context" 
+                                       value="1" 
+                                       <?php checked(get_option('chatbot_use_context'), '1'); ?>>
+                                Activer la prise en compte du contexte de la page
+                            </label>
+                            <p class="description">Lorsque cette option est activée, le chatbot pourra utiliser le contenu de la page courante pour répondre aux questions.</p>
                         </td>
                     </tr>
 
@@ -352,17 +374,54 @@ class MultiLLMChatbot {
             return;
         }
 
-        error_log('Rendering chatbot interface');
+        // Get enhanced page context only if context is enabled globally
+        $page_content = '';
+        $context_enabled = get_option('chatbot_use_context', '0') === '1';
+        $is_singular = is_singular();
+        
+        error_log('Context setting value: ' . get_option('chatbot_use_context', '0'));
+        error_log('Context enabled in settings: ' . ($context_enabled ? 'yes' : 'no'));
+        error_log('Is singular page: ' . ($is_singular ? 'yes' : 'no'));
+
+        if ($context_enabled && $is_singular) {
+            $page_content = $this->get_page_context();
+            error_log('Context enabled globally, context length: ' . strlen($page_content));
+        } else {
+            error_log('Context disabled or not a singular page');
+        }
+
+        error_log('Rendering chatbot interface' . (empty($page_content) ? ' without context' : ' with context available'));
         ?>
         <script src="https://cdn.jsdelivr.net/npm/marked@12.0.0/marked.min.js"></script>
+        <script type="text/javascript">
+            var chatbotPageContext = <?php echo json_encode($page_content); ?>;
+            var chatbotContextEnabled = <?php echo json_encode($context_enabled); ?>;
+            var chatbotIsSingular = <?php echo json_encode($is_singular); ?>;
+            console.log('Context enabled:', chatbotContextEnabled);
+            console.log('Context available:', Boolean(chatbotPageContext));
+        </script>
         <div id="chatbot-toggle">💬</div>
         <div id="chatbot-container" class="minimized">
             <div class="chatbot-header">
-                <button id="clear-chat" title="Start New Chat">🗑️</button>
+                <div class="chatbot-controls">
+                    <?php if ($context_enabled): ?>
+                        <label class="context-toggle<?php echo !$is_singular ? ' disabled' : ''; ?>" 
+                               title="<?php echo !$is_singular ? 'Le contexte n\'est disponible que sur les articles et les pages' : 'Utiliser le contexte de la page'; ?>">
+                            <input type="checkbox" 
+                                   id="toggle-context" 
+                                   <?php echo !$is_singular ? 'disabled' : ''; ?>>
+                            <span>Utiliser le contexte de la page</span>
+                            <?php if (!$is_singular): ?>
+                                <span class="context-notice">(Non disponible)</span>
+                            <?php endif; ?>
+                        </label>
+                    <?php endif; ?>
+                    <button id="clear-chat" class="icon-button" title="Nouvelle conversation">🗑️</button>
+                </div>
                 <button id="chatbot-minimize">−</button>
             </div>
             <div id="chat-response"></div>
-            <input type="text" id="chat-input" placeholder="Posez une question...">
+            <input type="text" id="chat-input" placeholder="Posez votre question...">
             <button id="send-chat">Envoyer</button>
         </div>
         <?php
@@ -380,6 +439,8 @@ class MultiLLMChatbot {
         header('Connection: keep-alive');
 
         $message = sanitize_text_field($_GET['message'] ?? '');
+        $page_context = sanitize_text_field($_GET['context'] ?? '');
+        
         if (empty($message)) {
             error_log('Error: Empty message received');
             echo "data: " . json_encode(['error' => 'Message required']) . "\n\n";
@@ -392,6 +453,17 @@ class MultiLLMChatbot {
         $assistant_id = get_option("chatbot_{$provider}_assistant_id");
         $use_assistant = get_option("chatbot_{$provider}_use_assistant");
         $definition = get_option("chatbot_{$provider}_definition", '');
+
+        // Add page context to system instructions if available
+        if (!empty($page_context)) {
+            error_log('Adding page context to request. Context length: ' . strlen($page_context));
+            error_log('Context preview: ' . substr($page_context, 0, 200) . '...');
+            $context_prompt = "Current page content:\n\n$page_context\n\nPlease use this content as context when relevant to answer the user's questions.";
+            $definition = $definition ? $definition . "\n\n" . $context_prompt : $context_prompt;
+            error_log('Final system message length: ' . strlen($definition));
+        } else {
+            error_log('No page context provided in request');
+        }
 
         error_log("Provider: $provider");
         error_log("Assistant enabled: " . ($use_assistant ? 'yes' : 'no'));
@@ -444,11 +516,19 @@ class MultiLLMChatbot {
                     'model' => 'gpt-4-turbo-preview',
                     'messages' => [
                         ['role' => 'system', 'content' => $definition],
+                        // Add context as a separate user message if available
+                        ...($page_context ? [['role' => 'user', 'content' => "Here is the current page content for context:\n\n$page_context"]] : []),
                         ['role' => 'user', 'content' => $message]
                     ],
                     'stream' => true
                 ];
-                error_log('OpenAI request configured with system instructions');
+                error_log('OpenAI request payload: ' . print_r([
+                    'url' => $base_url . 'chat/completions',
+                    'system_content_length' => strlen($definition),
+                    'system_content' => substr($definition, 0, 500) . (strlen($definition) > 500 ? '...' : ''),
+                    'context_length' => strlen($page_context ?? ''),
+                    'user_message' => $message
+                ], true));
                 break;
 
             case 'mistral':
@@ -462,7 +542,12 @@ class MultiLLMChatbot {
                     ],
                     'stream' => true
                 ];
-                error_log('Mistral request configured with system instructions');
+                error_log('Mistral request payload: ' . print_r([
+                    'url' => $base_url,
+                    'system_content_length' => strlen($definition),
+                    'system_content' => substr($definition, 0, 500) . (strlen($definition) > 500 ? '...' : ''),
+                    'user_message' => $message
+                ], true));
                 break;
 
             case 'claude':
@@ -548,86 +633,84 @@ class MultiLLMChatbot {
      * @param string $message      User message to process
      */
     private function handle_assistant_request($provider, $api_key, $assistant_id, $message) {
-        error_log("Processing assistant request for $provider with ID: $assistant_id");
+        error_log("Processing assistant request for $provider");
         
-        $headers = [
-            'Authorization: Bearer ' . $api_key,
-            'Content-Type: application/json'
-        ];
-
         if ($provider === 'openai') {
-            $headers[] = 'OpenAI-Beta: assistants=v2';
+            $headers = [
+                'Authorization: Bearer ' . $api_key,
+                'Content-Type: application/json',
+                'OpenAI-Beta: assistants=v2'
+            ];
+            
             $base_url = 'https://api.openai.com/v1/';
             
             // Create thread
             $thread_id = $this->create_openai_thread($base_url, $headers);
             if (!$thread_id) {
-                error_log("Failed to create OpenAI thread");
                 echo "data: " . json_encode(['error' => 'Failed to create thread']) . "\n\n";
                 return;
             }
-            error_log("Created OpenAI thread: $thread_id");
-
-            // Add message
-            $message_response = $this->add_message_to_thread($base_url, $headers, $thread_id, $message);
-            if (is_wp_error($message_response)) {
-                error_log("Failed to add message to thread: " . $message_response->get_error_message());
-                echo "data: " . json_encode(['error' => 'Failed to add message to thread']) . "\n\n";
-                return;
-            }
-            error_log("Added message to thread successfully");
-
-            // Run assistant
-            $run_id = $this->run_openai_assistant($base_url, $headers, $thread_id, $assistant_id);
-            if (!$run_id) {
-                error_log("Failed to start OpenAI assistant");
-                echo "data: " . json_encode(['error' => 'Failed to start assistant']) . "\n\n";
-                return;
-            }
-            error_log("Started assistant run: $run_id");
-
-            // Poll and stream
-            $this->poll_openai_completion($base_url, $headers, $thread_id, $run_id);
-
-        } else if ($provider === 'mistral') {
-            $base_url = 'https://api.mistral.ai/v1/';
-            error_log("Making Mistral agent request");
             
-            // Use the agents/completions endpoint with agent_id
+            // Add context to message if available
+            $page_context = sanitize_text_field($_GET['context'] ?? '');
+            $full_message = $message;
+            if (!empty($page_context)) {
+                error_log('Adding context to assistant message. Context length: ' . strlen($page_context));
+                $full_message = "Context:\n$page_context\n\nUser Question: $message";
+            }
+
+            // Add message to thread
+            $message_result = $this->add_message_to_thread($base_url, $headers, $thread_id, $full_message);
+            if (is_wp_error($message_result)) {
+                echo "data: " . json_encode(['error' => 'Failed to add message']) . "\n\n";
+                return;
+            }
+            
+            // Start run
+            $run_id = $this->start_assistant_run($base_url, $headers, $thread_id, $assistant_id);
+            if (!$run_id) {
+                echo "data: " . json_encode(['error' => 'Failed to start run']) . "\n\n";
+                return;
+            }
+            
+            // Poll for completion
+            $this->poll_openai_completion($base_url, $headers, $thread_id, $run_id);
+        } else if ($provider === 'mistral') {
+            $headers = [
+                'Authorization: Bearer ' . $api_key,
+                'Content-Type: application/json'
+            ];
+            
+            $base_url = 'https://api.mistral.ai/v1/chat/completions';
+            
+            // Add context to message if available
+            $page_context = sanitize_text_field($_GET['context'] ?? '');
+            $messages = [];
+            
+            if (!empty($page_context)) {
+                error_log('Adding context to Mistral message. Context length: ' . strlen($page_context));
+                $messages[] = [
+                    'role' => 'system',
+                    'content' => "Current page content:\n\n$page_context\n\nPlease use this content as context when relevant to answer the user's questions."
+                ];
+            }
+            
+            $messages[] = ['role' => 'user', 'content' => $message];
+            
             $body = json_encode([
-                'agent_id' => $assistant_id,
-                'messages' => [
-                    ['role' => 'user', 'content' => $message]
-                ],
+                'model' => 'mistral-large-latest',
+                'messages' => $messages,
                 'stream' => true
             ]);
-
-            $ch = curl_init($base_url . 'agents/completions');
-            curl_setopt_array($ch, [
-                CURLOPT_POST => true,
-                CURLOPT_POSTFIELDS => $body,
-                CURLOPT_HTTPHEADER => $headers,
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_WRITEFUNCTION => function($curl, $data) {
-                    return $this->handle_streaming_response($data, 'mistral');
-                }
-            ]);
-
-            $result = curl_exec($ch);
             
-            if (curl_errno($ch)) {
-                $error = curl_error($ch);
-                error_log("Mistral API Error: $error");
-                echo "data: " . json_encode(['error' => "Failed to connect to Mistral API: $error"]) . "\n\n";
-            }
+            error_log('Mistral request payload: ' . print_r([
+                'url' => $base_url,
+                'messages_count' => count($messages),
+                'context_present' => !empty($page_context),
+                'user_message' => $message
+            ], true));
             
-            $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            if ($http_code !== 200) {
-                error_log("Mistral API HTTP Error: $http_code");
-                echo "data: " . json_encode(['error' => "Mistral API Error: $http_code"]) . "\n\n";
-            }
-            
-            curl_close($ch);
+            $this->handle_standard_request($provider, $base_url, $headers, $body);
         }
     }
 
@@ -660,7 +743,9 @@ class MultiLLMChatbot {
                     $content = $this->extract_streaming_content($decoded, $provider);
                     if ($content !== null) {
                         echo "data: " . json_encode(['content' => $content]) . "\n\n";
-                        ob_flush();
+                        if (ob_get_level() > 0) {
+                            ob_flush();
+                        }
                         flush();
                     }
                 } catch (Exception $e) {
@@ -773,7 +858,9 @@ class MultiLLMChatbot {
             foreach ($last_message['content'] as $content) {
                 if ($content['type'] === 'text') {
                     echo "data: " . json_encode(['content' => $content['text']['value']]) . "\n\n";
-                    ob_flush();
+                    if (ob_get_level() > 0) {
+                        ob_flush();
+                    }
                     flush();
                 }
             }
@@ -855,7 +942,7 @@ class MultiLLMChatbot {
      * @param string $assistant_id Assistant to use
      * @return string|false       Run ID if successful, false otherwise
      */
-    private function run_openai_assistant($base_url, $headers, $thread_id, $assistant_id) {
+    private function start_assistant_run($base_url, $headers, $thread_id, $assistant_id) {
         error_log("Starting assistant run with ID: $assistant_id");
         
         $response = wp_remote_post($base_url . "threads/$thread_id/runs", [
@@ -982,6 +1069,83 @@ class MultiLLMChatbot {
         }
         
         curl_close($ch);
+    }
+
+    public function get_page_context() {
+        $context = '';
+        
+        if (is_singular()) {
+            $post = get_post();
+            if ($post) {
+                // Basic post info
+                $context .= "Title: " . $post->post_title . "\n\n";
+                
+                // Categories and tags
+                $categories = get_the_category($post->ID);
+                if (!empty($categories)) {
+                    $context .= "Categories: " . implode(', ', array_map(function($cat) {
+                        return $cat->name;
+                    }, $categories)) . "\n";
+                }
+                
+                $tags = get_the_tags($post->ID);
+                if (!empty($tags)) {
+                    $context .= "Tags: " . implode(', ', array_map(function($tag) {
+                        return $tag->name;
+                    }, $tags)) . "\n";
+                }
+                
+                // Publication date
+                $context .= "Published: " . get_the_date('', $post) . "\n\n";
+                
+                // Page hierarchy for pages
+                if (is_page()) {
+                    $ancestors = get_post_ancestors($post);
+                    if (!empty($ancestors)) {
+                        $context .= "Page Location: ";
+                        foreach (array_reverse($ancestors) as $ancestor) {
+                            $context .= get_the_title($ancestor) . " > ";
+                        }
+                        $context .= $post->post_title . "\n\n";
+                    }
+                }
+                
+                // Main content
+                $context .= "Content:\n" . wp_strip_all_tags($post->post_content) . "\n\n";
+                
+                // Comments summary
+                $comments = get_comments(['post_id' => $post->ID, 'status' => 'approve']);
+                if (!empty($comments)) {
+                    $context .= "Key Comments:\n";
+                    foreach (array_slice($comments, 0, 3) as $comment) {
+                        $context .= "- " . wp_strip_all_tags($comment->comment_content) . "\n";
+                    }
+                    $context .= "\n";
+                }
+                
+                // Custom fields (ACF support)
+                if (function_exists('get_fields')) {
+                    $fields = get_fields($post->ID);
+                    if (!empty($fields)) {
+                        $context .= "Additional Information:\n";
+                        foreach ($fields as $key => $value) {
+                            if (is_string($value)) {
+                                $context .= "$key: $value\n";
+                            }
+                        }
+                    }
+                }
+                
+                // Limit length while preserving complete sentences
+                if (strlen($context) > 2000) {
+                    $context = substr($context, 0, 2000);
+                    $context = substr($context, 0, strrpos($context, '.') + 1);
+                    $context .= "\n\n[Content truncated for length...]";
+                }
+            }
+        }
+        
+        return $context;
     }
 }
 

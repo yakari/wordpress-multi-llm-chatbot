@@ -2,6 +2,90 @@
 
 All notable changes to the Multi-LLM Chatbot plugin will be documented in this file.
 
+## [1.23.0] - 2025-02-20
+### Changed
+- Replaced context button with checkbox for better usability
+- Updated all UI text to French
+- Improved context toggle visibility and understanding
+- Better layout for context controls
+
+### Fixed
+- French translations for all user messages
+- Context toggle user experience
+- Error message formatting in French
+
+## [1.22.0] - 2025-02-20
+### Added
+- Global context awareness toggle in settings
+- Better control over context feature visibility
+
+### Changed
+- Context button only shows when enabled in settings
+- Improved context handling based on global settings
+- Better user experience for context management
+
+### Fixed
+- Context button visibility logic
+- Context handling respects global settings
+- Better error handling for context state
+
+## [1.21.0] - 2025-02-20
+### Fixed
+- Mistral assistant API integration
+- Context handling for Mistral agents
+- Proper API endpoint usage for each provider
+- Better error handling for Mistral requests
+
+### Changed
+- Separated OpenAI and Mistral assistant handling
+- Improved context integration for Mistral
+- Better logging for API requests
+
+## [1.20.0] - 2025-02-19
+### Added
+- Enhanced page context with categories and tags
+- Support for page hierarchy in context
+- Comments integration in context
+- Custom fields (ACF) support
+- Publication date and metadata
+- Smart context truncation preserving sentences
+
+### Changed
+- Improved context structure for better AI understanding
+- Better organization of contextual information
+- More comprehensive page awareness
+
+### Fixed
+- Context truncation preserving sentence boundaries
+- Better handling of custom field data
+- Improved context relevance
+
+## [1.19.0] - 2025-02-19
+### Added
+- Context toggle button in chatbot interface
+- Visual feedback for context state
+- Dynamic context button visibility
+
+### Changed
+- Moved context control from settings to chatbot UI
+- Improved context toggle user experience
+- Better visual indication of context status
+
+### Fixed
+- Context awareness more intuitive to use
+- Context button hidden when no context available
+- Context state feedback
+
+## [1.18.0] - 2025-02-19
+### Added
+- Page context awareness: chatbot now has access to current page content
+- Automatic context injection into chat conversations
+- Smart context truncation to avoid API limits
+
+### Changed
+- Enhanced system instructions to incorporate page context
+- Improved context handling for better response relevance
+
 ## [1.17.0] - 2025-02-19
 ### Added
 - Chat history persistence across page loads

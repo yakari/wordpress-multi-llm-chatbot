@@ -5,6 +5,8 @@ document.addEventListener("DOMContentLoaded", function () {
     const chatInput = document.getElementById("chat-input");
     const chatResponse = document.getElementById("chat-response");
     const minimizeButton = document.getElementById("chatbot-minimize");
+    const toggleContextButton = document.getElementById("toggle-context");
+    let useContext = false;
 
     // Configure marked options
     marked.setOptions({
@@ -94,6 +96,28 @@ document.addEventListener("DOMContentLoaded", function () {
         }
     });
 
+    // Initialize context toggle only if context is enabled globally
+    if (window.chatbotContextEnabled) {
+        const toggleContextCheckbox = document.getElementById("toggle-context");
+        if (toggleContextCheckbox) {
+            if (window.chatbotIsSingular && window.chatbotPageContext) {
+                toggleContextCheckbox.addEventListener("change", function() {
+                    useContext = this.checked;
+                });
+            } else {
+                toggleContextCheckbox.disabled = true;
+                toggleContextCheckbox.parentElement.classList.add('disabled');
+                toggleContextCheckbox.parentElement.title = 'Le contexte n\'est disponible que sur les articles et les pages';
+            }
+        }
+    } else {
+        // Remove context toggle if it exists
+        const contextToggle = document.querySelector('.context-toggle');
+        if (contextToggle) {
+            contextToggle.remove();
+        }
+    }
+
     // Update sendMessage function to save history after each message
     function sendMessage() {
         const message = chatInput.value.trim();
@@ -115,7 +139,7 @@ document.addEventListener("DOMContentLoaded", function () {
         chatInput.value = "";
 
         const responseElement = document.createElement('p');
-        responseElement.innerHTML = '<strong>Chatbot :</strong> <span class="typing-response">En attente de réponse...</span>';
+        responseElement.innerHTML = '<strong>Assistant :</strong> <span class="typing-response">En attente de réponse...</span>';
         chatResponse.appendChild(responseElement);
         const typingSpan = responseElement.querySelector('.typing-response');
 
@@ -133,7 +157,14 @@ document.addEventListener("DOMContentLoaded", function () {
 
         const loadingInterval = setInterval(updateLoadingDots, 500);
 
-        const eventSource = new EventSource(`${chatbot_ajax.ajaxurl}?action=chatbot_request&message=${encodeURIComponent(message)}`);
+        // Add page context to request only if enabled and available
+        const contextParam = (useContext && window.chatbotPageContext) 
+            ? `&context=${encodeURIComponent(window.chatbotPageContext)}` 
+            : '';
+        
+        const eventSource = new EventSource(
+            `${chatbot_ajax.ajaxurl}?action=chatbot_request&message=${encodeURIComponent(message)}${contextParam}`
+        );
 
         eventSource.onmessage = function(event) {
             clearInterval(loadingInterval);
@@ -141,7 +172,7 @@ document.addEventListener("DOMContentLoaded", function () {
             try {
                 const data = JSON.parse(event.data);
                 if (data.error) {
-                    typingSpan.textContent = `Erreur: ${data.error}`;
+                    typingSpan.textContent = `Erreur : ${data.error}`;
                     eventSource.close();
                     saveChatHistory(); // Save after error
                     return;
@@ -176,7 +207,7 @@ document.addEventListener("DOMContentLoaded", function () {
             eventSource.close();
             
             if (!hasReceivedResponse && !fullResponse) {
-                typingSpan.textContent = 'Erreur: Impossible de contacter le serveur.';
+                typingSpan.textContent = 'Erreur : Impossible de contacter le serveur.';
                 saveChatHistory(); // Save after error
             }
         };
@@ -186,7 +217,7 @@ document.addEventListener("DOMContentLoaded", function () {
                 clearInterval(loadingInterval);
                 eventSource.close();
                 if (!fullResponse) {
-                    typingSpan.textContent = 'Erreur: Temps de réponse dépassé.';
+                    typingSpan.textContent = 'Erreur : Temps de réponse dépassé.';
                     saveChatHistory(); // Save after timeout
                 }
             }
