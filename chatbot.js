@@ -170,15 +170,25 @@ document.addEventListener("DOMContentLoaded", function () {
                 ? `&context=${encodeURIComponent(window.chatbotPageContext)}` 
                 : '';
             
-            const url = `${chatbot_ajax.ajaxurl}?action=chatbot_request&message=${encodeURIComponent(message)}${contextParam}&_=${Date.now()}`;
+            // Add nonce if available
+            const nonceParam = chatbot_ajax.nonce 
+                ? `&_wpnonce=${chatbot_ajax.nonce}` 
+                : '';
+            
+            const url = `${chatbot_ajax.ajaxurl}?action=chatbot_request&message=${encodeURIComponent(message)}${contextParam}${nonceParam}&_=${Date.now()}`;
             console.log('Creating EventSource with URL:', url);
             
-            currentEventSource = new EventSource(url);
-            currentEventSource.withCredentials = true; // Enable credentials
+            currentEventSource = new EventSource(url, {
+                withCredentials: true
+            });
 
             currentEventSource.onopen = function() {
                 console.log('EventSource connection established');
                 console.log('ReadyState:', currentEventSource.readyState);
+                console.log('Connection details:', {
+                    withCredentials: currentEventSource.withCredentials,
+                    url: currentEventSource.url
+                });
                 hasReceivedResponse = false; // Reset on new connection
             };
 

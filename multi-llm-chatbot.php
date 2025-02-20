@@ -87,10 +87,16 @@ class MultiLLMChatbot {
             true
         );
         
-        // Add AJAX URL to script
-        wp_localize_script('chatbot-script', 'chatbot_ajax', [
-            'ajaxurl' => admin_url('admin-ajax.php')
-        ]);
+        // Add nonce for authenticated users
+        $script_data = [
+            'ajaxurl' => admin_url('admin-ajax.php'),
+        ];
+        
+        if (is_user_logged_in()) {
+            $script_data['nonce'] = wp_create_nonce('wp_rest');
+        }
+        
+        wp_localize_script('chatbot-script', 'chatbot_ajax', $script_data);
 
         error_log('Multi-LLM Chatbot frontend scripts enqueued');
     }
@@ -432,61 +438,52 @@ class MultiLLMChatbot {
      * Main entry point for all chat interactions
      */
     public function handle_chat_request() {
-        error_log('Handling new chat request');
-        error_log('Request headers: ' . print_r(getallheaders(), true));
-        error_log('Server software: ' . $_SERVER['SERVER_SOFTWARE']);
+        // Allow cross-origin requests from the same domain
+        $allowed_origin = parse_url(get_site_url(), PHP_URL_HOST);
+        $request_origin = parse_url($_SERVER['HTTP_ORIGIN'] ?? '', PHP_URL_HOST);
         
-        // Close any active session to prevent blocking
-        if (session_status() === PHP_SESSION_ACTIVE) {
-            session_write_close();
+        error_log('Allowed origin: ' . $allowed_origin);
+        error_log('Request origin: ' . $request_origin);
+        
+        if ($allowed_origin === $request_origin) {
+            header('Access-Control-Allow-Origin: ' . $_SERVER['HTTP_ORIGIN']);
+        } else {
+            error_log('Origin mismatch - allowed: ' . $allowed_origin . ', request: ' . $request_origin);
+            header('Access-Control-Allow-Origin: ' . get_site_url());
         }
         
-        // Set PHP settings for streaming
-        set_time_limit(0);
-        ignore_user_abort(false);
-        
-        // Set headers for SSE (Server-Sent Events)
+        // Other headers
         header('Content-Type: text/event-stream');
         header('Cache-Control: no-store, no-cache, must-revalidate');
         header('Pragma: no-cache');
-        header('X-Accel-Buffering: no'); // Disable nginx buffering
-        header('Connection: keep-alive');
-        
-        // Add CORS headers - use the actual domain instead of wildcard
-        $origin = $_SERVER['HTTP_ORIGIN'] ?? '*';
-        error_log('Request origin: ' . $origin);
-        header('Access-Control-Allow-Origin: ' . esc_url_raw($origin));
-        header('Access-Control-Allow-Methods: GET, POST');
-        header('Access-Control-Allow-Headers: Content-Type');
+        header('X-Accel-Buffering: no');
         header('Access-Control-Allow-Credentials: true');
+        header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
+        header('Access-Control-Allow-Headers: Content-Type, Authorization');
         
-        // Prevent FastCGI and PHP buffering
-        if (function_exists('fastcgi_finish_request')) {
-            ob_end_clean();
-        } else {
-            ob_end_flush();
+        // Handle preflight requests
+        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+            http_response_code(200);
+            exit();
         }
-        while (ob_get_level() > 0) {
+        
+        // Check nonce for authenticated users
+        if (is_user_logged_in()) {
+            check_ajax_referer('wp_rest', '_wpnonce');
+        }
+        
+        // Prevent output buffering
+        while (ob_get_level()) {
             ob_end_clean();
         }
         @ini_set('output_buffering', 'off');
         @ini_set('zlib.output_compression', false);
-        @ini_set('implicit_flush', true);
-        if (function_exists('apache_setenv')) {
-            apache_setenv('no-gzip', 1);
-        }
         flush();
-
+        
         try {
-            // Send initial response to test connection
+            // Send initial response
             echo "data: " . json_encode(['content' => 'Connexion établie...']) . "\n\n";
-            if (function_exists('fastcgi_finish_request')) {
-                ob_flush();
-            }
             flush();
-            
-            // Small delay to ensure the connection message is received
-            usleep(100000); // 100ms delay
             
             // Rest of the handler...
             $message = sanitize_text_field($_GET['message'] ?? '');
@@ -535,17 +532,9 @@ class MultiLLMChatbot {
                 error_log("Using standard chat API for $provider");
                 $this->handle_chat_api_request($provider, $api_key, $message, $definition);
             }
-
-            if (function_exists('fastcgi_finish_request')) {
-                fastcgi_finish_request();
-            }
         } catch (Exception $e) {
-            error_log('Error in chat request handler: ' . $e->getMessage());
-            error_log('Stack trace: ' . $e->getTraceAsString());
-            echo "data: " . json_encode(['error' => 'Erreur serveur interne']) . "\n\n";
-            if (function_exists('fastcgi_finish_request')) {
-                fastcgi_finish_request();
-            }
+            error_log('Error: ' . $e->getMessage());
+            echo "data: " . json_encode(['error' => 'Erreur serveur']) . "\n\n";
         }
     }
 
