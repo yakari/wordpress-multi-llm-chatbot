@@ -403,8 +403,15 @@ class MultiLLMChatbot {
             var chatbotPageContext = <?php echo json_encode($page_content); ?>;
             var chatbotContextEnabled = <?php echo json_encode($context_enabled); ?>;
             var chatbotIsSingular = <?php echo json_encode($is_singular); ?>;
-            console.log('Context enabled:', chatbotContextEnabled);
-            console.log('Context available:', Boolean(chatbotPageContext));
+            var chatbotConfig = {
+                provider: <?php echo json_encode(get_option('chatbot_provider', 'openai')); ?>,
+                useAssistant: <?php echo json_encode(get_option("chatbot_" . get_option('chatbot_provider', 'openai') . "_use_assistant")); ?>,
+                assistantId: <?php echo json_encode(get_option("chatbot_" . get_option('chatbot_provider', 'openai') . "_assistant_id")); ?>,
+                hasDefinition: <?php echo json_encode(!empty(get_option("chatbot_" . get_option('chatbot_provider', 'openai') . "_definition"))); ?>,
+                definitionLength: <?php echo strlen(get_option("chatbot_" . get_option('chatbot_provider', 'openai') . "_definition")); ?>
+            };
+            
+            console.log('Chatbot configuration:', chatbotConfig);
         </script>
         <div id="chatbot-toggle">💬</div>
         <div id="chatbot-container" class="minimized">
@@ -442,12 +449,21 @@ class MultiLLMChatbot {
         $provider = get_option('chatbot_provider', 'openai');
         $use_assistant = get_option("chatbot_{$provider}_use_assistant");
         $assistant_id = get_option("chatbot_{$provider}_assistant_id");
+        $definition = get_option("chatbot_{$provider}_definition", '');
         
-        error_log('Chat request details:');
+        error_log('Chat request configuration:');
         error_log("- Provider: $provider");
-        error_log("- Use Assistant: " . ($use_assistant ? 'yes' : 'no'));
-        error_log("- Assistant ID: " . ($assistant_id ?: 'none'));
-        error_log("- Context Enabled: " . (get_option('chatbot_use_context', '0') === '1' ? 'yes' : 'no'));
+        error_log("- Use Assistant/Agent: " . ($use_assistant ? 'yes' : 'no'));
+        error_log("- Assistant/Agent ID: " . ($assistant_id ?: 'none'));
+        error_log("- Has Definition: " . (!empty($definition) ? 'yes' : 'no'));
+        error_log("- Definition length: " . strlen($definition));
+        
+        if ($provider === 'mistral') {
+            error_log('Mistral specific configuration:');
+            error_log('- Agent mode enabled: ' . ($use_assistant ? 'yes' : 'no'));
+            error_log('- Agent ID set: ' . (!empty($assistant_id) ? 'yes' : 'no'));
+            error_log('- Definition preview: ' . substr($definition, 0, 100) . '...');
+        }
         
         // Allow same-origin requests
         header('Access-Control-Allow-Origin: ' . get_site_url());
@@ -486,7 +502,6 @@ class MultiLLMChatbot {
 
             // Get provider configuration
             $api_key = get_option("chatbot_{$provider}_api_key");
-            $definition = get_option("chatbot_{$provider}_definition", '');
 
             // Add page context to system instructions if available
             if (!empty($page_context)) {
@@ -512,10 +527,12 @@ class MultiLLMChatbot {
             // Route to appropriate handler based on configuration
             if (($provider === 'openai' || $provider === 'mistral') && 
                 $use_assistant && !empty($assistant_id)) {
-                error_log("Using assistant API for $provider");
+                error_log("Using assistant/agent API for $provider");
                 $this->handle_assistant_request($provider, $api_key, $assistant_id, $message);
             } else {
-                error_log("Using standard chat API for $provider");
+                error_log("Using standard chat API for $provider (Assistant mode: " . 
+                         ($use_assistant ? 'yes' : 'no') . 
+                         ", Assistant ID: " . ($assistant_id ?: 'none') . ")");
                 $this->handle_chat_api_request($provider, $api_key, $message, $definition);
             }
         } catch (Exception $e) {

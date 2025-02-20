@@ -186,6 +186,7 @@ document.addEventListener("DOMContentLoaded", function () {
             
             const url = `${chatbot_ajax.ajaxurl}?action=chatbot_request&message=${encodeURIComponent(message)}${contextParam}${nonceParam}&_=${Date.now()}`;
             console.log('Sending chat request:', {
+                config: window.chatbotConfig,
                 useContext,
                 hasContextParam: Boolean(contextParam),
                 url,
@@ -222,7 +223,11 @@ document.addEventListener("DOMContentLoaded", function () {
                     for (const line of lines) {
                         if (line.startsWith('data: ')) {
                             const data = JSON.parse(line.slice(6));
-                            console.log('Received response chunk:', data);
+                            console.log('Server response:', {
+                                data,
+                                provider: window.chatbotConfig.provider,
+                                usingAssistant: window.chatbotConfig.useAssistant
+                            });
                             if (data.error) {
                                 console.error('Server returned error:', data.error);
                                 typingSpan.textContent = `Erreur : ${data.error}`;
@@ -251,6 +256,7 @@ document.addEventListener("DOMContentLoaded", function () {
             } catch (error) {
                 console.error('Request failed:', {
                     error,
+                    config: window.chatbotConfig,
                     retryCount,
                     maxRetries
                 });
