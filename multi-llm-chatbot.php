@@ -684,60 +684,96 @@ class MultiLLMChatbot {
     private function handle_assistant_request($provider, $api_key, $assistant_id, $message) {
         error_log("Processing assistant request for $provider");
         error_log("Request details:");
-        error_log("- Assistant ID: $assistant_id");
+        error_log("- Assistant/Agent ID: $assistant_id");
         error_log("- Message length: " . strlen($message));
         
-        if ($provider === 'mistral') {
+        if ($provider === 'openai') {
+            $headers = [
+                'Authorization: Bearer ' . $api_key,
+                'Content-Type: application/json',
+                'OpenAI-Beta: assistants=v2'
+            ];
+            
+            $base_url = 'https://api.openai.com/v1/';
+            
+            error_log('OpenAI API request configuration:');
+            error_log('- Base URL: ' . $base_url);
+            error_log('- Assistant ID: ' . $assistant_id);
+            
+            // Create thread
+            $thread_id = $this->create_openai_thread($base_url, $headers);
+            if (!$thread_id) {
+                echo "data: " . json_encode(['error' => 'Failed to create thread']) . "\n\n";
+                return;
+            }
+            
+            // Add context to message if available
+            $page_context = sanitize_text_field($_GET['context'] ?? '');
+            $full_message = $message;
+            if (!empty($page_context)) {
+                error_log('Adding context to OpenAI message. Context length: ' . strlen($page_context));
+                $full_message = "Context:\n$page_context\n\nUser Question: $message";
+            }
+
+            // Add message to thread
+            $message_result = $this->add_message_to_thread($base_url, $headers, $thread_id, $full_message);
+            if (is_wp_error($message_result)) {
+                echo "data: " . json_encode(['error' => 'Failed to add message']) . "\n\n";
+                return;
+            }
+            
+            // Start run
+            $run_id = $this->start_assistant_run($base_url, $headers, $thread_id, $assistant_id);
+            if (!$run_id) {
+                echo "data: " . json_encode(['error' => 'Failed to start run']) . "\n\n";
+                return;
+            }
+            
+            // Poll for completion
+            $this->poll_openai_completion($base_url, $headers, $thread_id, $run_id);
+            
+        } else if ($provider === 'mistral') {
             $headers = [
                 'Authorization: Bearer ' . $api_key,
                 'Content-Type: application/json'
             ];
             
-            $base_url = 'https://api.mistral.ai/v1/chat/completions';
-            
-            // Get agent definition
-            $definition = get_option('chatbot_mistral_definition', '');
+            // Use the correct Mistral agents endpoint
+            $base_url = 'https://api.mistral.ai/v1/agents/completions';
             
             // Add context to message if available
             $page_context = sanitize_text_field($_GET['context'] ?? '');
             $messages = [];
             
             // Log the full request configuration
-            error_log('Mistral API request configuration:');
+            error_log('Mistral Agent API request configuration:');
             error_log('- Base URL: ' . $base_url);
-            error_log('- Has Definition: ' . (!empty($definition) ? 'yes' : 'no'));
-            error_log('- Definition length: ' . strlen($definition));
+            error_log('- Agent ID: ' . $assistant_id);
             error_log('- Has Context: ' . (!empty($page_context) ? 'yes' : 'no'));
             error_log('- Context length: ' . strlen($page_context));
             
-            // Add system message with definition and context if available
-            if (!empty($definition) || !empty($page_context)) {
-                $system_content = '';
-                if (!empty($definition)) {
-                    $system_content .= $definition . "\n\n";
-                }
-                if (!empty($page_context)) {
-                    $system_content .= "Current page content:\n\n$page_context\n\nPlease use this content as context when relevant to answer questions.";
-                }
-                $messages[] = ['role' => 'system', 'content' => $system_content];
+            // Add user message with context if available
+            if (!empty($page_context)) {
+                $messages[] = [
+                    'role' => 'user',
+                    'content' => "Context:\n$page_context\n\nUser Question: $message"
+                ];
+            } else {
+                $messages[] = ['role' => 'user', 'content' => $message];
             }
             
-            // Add user message
-            $messages[] = ['role' => 'user', 'content' => $message];
-            
             $body = json_encode([
-                'model' => 'mistral-large-latest',
+                'agent_id' => $assistant_id,  // Use agent_id parameter as per Mistral API
                 'messages' => $messages,
                 'stream' => true
             ]);
             
             // Log the actual API request
-            error_log('Mistral API request payload:');
+            error_log('Mistral Agent API request payload:');
             error_log(json_encode([
                 'url' => $base_url,
+                'agent_id' => $assistant_id,
                 'messages_count' => count($messages),
-                'has_system_message' => isset($messages[0]) && $messages[0]['role'] === 'system',
-                'system_message_length' => isset($messages[0]) ? strlen($messages[0]['content']) : 0,
                 'user_message_length' => strlen($message)
             ], JSON_PRETTY_PRINT));
             
