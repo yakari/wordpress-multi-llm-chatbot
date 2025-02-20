@@ -4,6 +4,7 @@ document.addEventListener("DOMContentLoaded", function () {
     const sendButton = document.getElementById("send-chat");
     const chatInput = document.getElementById("chat-input");
     const chatResponse = document.getElementById("chat-response");
+    const minimizeButton = document.getElementById("chatbot-minimize");
 
     // Configure marked options
     marked.setOptions({
@@ -14,14 +15,22 @@ document.addEventListener("DOMContentLoaded", function () {
         sanitize: true      // Enable sanitization
     });
 
-    toggleButton.addEventListener("click", function () {
-        const isHidden = chatbotContainer.style.display === "none";
-        chatbotContainer.style.display = isHidden ? "block" : "none";
-        
-        // Focus the input field when opening the chat
-        if (isHidden) {
-            chatInput.focus();
-        }
+    // Replace minimize button handler
+    minimizeButton.addEventListener("click", function() {
+        chatbotContainer.classList.add("minimized");
+        toggleButton.classList.remove("hidden");
+        setTimeout(() => {
+            document.body.classList.remove("chat-open");
+        }, 300); // Match transition duration
+    });
+
+    // Update toggle handler with animations
+    toggleButton.addEventListener("click", function() {
+        this.classList.add("hidden");
+        chatbotContainer.classList.remove("minimized");
+        chatbotContainer.style.display = "flex";
+        chatInput.focus();
+        document.body.classList.add("chat-open");
     });
 
     sendButton.addEventListener("click", function () {
@@ -33,6 +42,31 @@ document.addEventListener("DOMContentLoaded", function () {
             sendMessage();
         }
     });
+
+    // Add smooth scroll animation for new messages
+    function scrollToBottom() {
+        const currentScroll = chatResponse.scrollTop;
+        const targetScroll = chatResponse.scrollHeight - chatResponse.clientHeight;
+        animateScroll(currentScroll, targetScroll);
+    }
+
+    function animateScroll(from, to) {
+        const duration = 300;
+        const start = performance.now();
+        
+        function update(currentTime) {
+            const elapsed = currentTime - start;
+            const progress = Math.min(elapsed / duration, 1);
+
+            chatResponse.scrollTop = from + (to - from) * progress;
+
+            if (progress < 1) {
+                requestAnimationFrame(update);
+            }
+        }
+
+        requestAnimationFrame(update);
+    }
 
     function sendMessage() {
         const message = chatInput.value.trim();
@@ -126,4 +160,24 @@ document.addEventListener("DOMContentLoaded", function () {
             }
         }, 60000);
     }
+
+    // Add click outside handler
+    document.addEventListener("click", function(event) {
+        const isClickInside = chatbotContainer.contains(event.target) || 
+                            toggleButton.contains(event.target);
+        
+        if (!isClickInside && !chatbotContainer.classList.contains("minimized")) {
+            minimizeButton.click(); // Reuse minimize button functionality
+        }
+    });
+
+    // Prevent clicks inside container from triggering the outside click handler
+    chatbotContainer.addEventListener("click", function(event) {
+        event.stopPropagation();
+    });
+
+    // Prevent toggle button from triggering the outside click handler
+    toggleButton.addEventListener("click", function(event) {
+        event.stopPropagation();
+    });
 });

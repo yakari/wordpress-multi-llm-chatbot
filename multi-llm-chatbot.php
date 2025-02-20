@@ -3,7 +3,7 @@
  * Plugin Name: Multi-LLM Chatbot
  * Plugin URI: https://foliesenbaie.fr
  * Description: Plugin WordPress pour intégrer un chatbot compatible avec OpenAI, Claude, Perplexity, Google Gemini et Mistral.
- * Version: 1.15.0
+ * Version: 1.16.0
  * Author: Yann Poirier <yakari@yakablog.info>
  * Author URI: https://foliesenbaie.fr
  * License: Apache-2.0
@@ -356,7 +356,8 @@ class MultiLLMChatbot {
         ?>
         <script src="https://cdn.jsdelivr.net/npm/marked@12.0.0/marked.min.js"></script>
         <div id="chatbot-toggle">💬</div>
-        <div id="chatbot-container" style="display: none;">
+        <div id="chatbot-container" class="minimized">
+            <button id="chatbot-minimize">−</button>
             <div id="chat-response"></div>
             <input type="text" id="chat-input" placeholder="Posez une question...">
             <button id="send-chat">Envoyer</button>

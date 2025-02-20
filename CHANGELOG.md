@@ -2,6 +2,21 @@
 
 All notable changes to the Multi-LLM Chatbot plugin will be documented in this file.
 
+## [1.16.0] - 2025-02-18
+### Changed
+- Improved chatbot UI and animations
+- Adjusted chatbot position and size for better usability
+- Added smooth transitions and animations
+- Added click-outside-to-minimize behavior
+- Standardized font sizes to 14px
+- Better mobile responsiveness
+
+### Fixed
+- Fixed chatbot positioning on smaller screens
+- Fixed jQuery dependency issues
+- Improved animation performance
+- Better handling of chat container states
+
 ## [1.15.0] - 2025-02-18
 ### Added
 - Support for Claude API integration
