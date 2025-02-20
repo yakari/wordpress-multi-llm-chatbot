@@ -1073,12 +1073,12 @@ class MultiLLMChatbot {
 
     public function get_page_context() {
         $context = '';
-        $max_length = 8000;
+        $max_length = 8000; // Keep the increased length
         
         if (is_singular()) {
             $post = get_post();
             if ($post) {
-                // Build context as before
+                // Basic post info
                 $context .= "Title: " . $post->post_title . "\n\n";
                 
                 // Categories and tags
@@ -1111,12 +1111,14 @@ class MultiLLMChatbot {
                     }
                 }
                 
-                // Get and clean content
+                // Get content based on editor type
                 $content = '';
                 if (did_action('elementor/loaded') && \Elementor\Plugin::$instance->documents->get($post->ID)->is_built_with_elementor()) {
+                    error_log('Getting Elementor content');
                     $elementor_content = \Elementor\Plugin::$instance->frontend->get_builder_content($post->ID, true);
                     $content = wp_strip_all_tags($elementor_content);
                 } else {
+                    error_log('Getting standard content');
                     $content = wp_strip_all_tags($post->post_content);
                 }
                 
@@ -1124,49 +1126,39 @@ class MultiLLMChatbot {
                 $content = preg_replace('/\s+/', ' ', $content);
                 $content = trim($content);
                 
-                // Log original size
-                error_log('Original content length: ' . strlen($content));
+                // Add content to context
+                $context .= "Content:\n" . $content . "\n\n";
                 
-                // Compress content
-                $compressed = gzencode($content, 9);
-                error_log('Compressed content length: ' . strlen($compressed));
+                // Log content length before truncation
+                error_log('Content length before truncation: ' . strlen($context));
                 
-                // Convert to hex for safe transport
-                $hex_compressed = bin2hex($compressed);
-                error_log('Hex compressed length: ' . strlen($hex_compressed));
-                
-                // Add compressed content to context with instructions
-                $context .= "Content (compressed with gzip, hex encoded):\n";
-                $context .= "COMPRESSED_START\n";
-                $context .= $hex_compressed . "\n";
-                $context .= "COMPRESSED_END\n\n";
-                $context .= "Instructions: This content is compressed with gzip and hex encoded. To read it:\n";
-                $context .= "1. Extract the content between COMPRESSED_START and COMPRESSED_END\n";
-                $context .= "2. Convert from hex to binary\n";
-                $context .= "3. Decompress using gzip\n";
-                $context .= "4. Use the decompressed content to answer questions\n\n";
-                
-                // Add any remaining context (comments, etc.)
-                $comments = get_comments(['post_id' => $post->ID, 'status' => 'approve']);
-                if (!empty($comments)) {
-                    $context .= "Key Comments:\n";
-                    foreach (array_slice($comments, 0, 3) as $comment) {
-                        $context .= "- " . wp_strip_all_tags($comment->comment_content) . "\n";
-                    }
-                    $context .= "\n";
-                }
-                
-                // Custom fields (ACF support)
-                if (function_exists('get_fields')) {
-                    $fields = get_fields($post->ID);
-                    if (!empty($fields)) {
-                        $context .= "Additional Information:\n";
-                        foreach ($fields as $key => $value) {
-                            if (is_string($value)) {
-                                $context .= "$key: $value\n";
-                            }
+                // Smarter length limiting while preserving complete sentences
+                if (strlen($context) > $max_length) {
+                    // Find the last complete sentence within the limit
+                    $truncated = substr($context, 0, $max_length);
+                    $last_sentence = strrpos($truncated, '.');
+                    
+                    if ($last_sentence !== false) {
+                        $context = substr($context, 0, $last_sentence + 1);
+                    } else {
+                        // If no sentence boundary found, try other punctuation
+                        $last_punct = max(
+                            strrpos($truncated, '!'),
+                            strrpos($truncated, '?'),
+                            strrpos($truncated, ':'),
+                            strrpos($truncated, ';')
+                        );
+                        if ($last_punct !== false) {
+                            $context = substr($context, 0, $last_punct + 1);
+                        } else {
+                            // If no punctuation found, try to break at a word boundary
+                            $last_space = strrpos($truncated, ' ');
+                            $context = $last_space !== false ? 
+                                substr($context, 0, $last_space) : 
+                                $truncated;
                         }
                     }
+                    $context .= "\n\n[Content truncated for length...]";
                 }
                 
                 error_log('Final context length: ' . strlen($context));

@@ -2,6 +2,17 @@
 
 All notable changes to the Multi-LLM Chatbot plugin will be documented in this file.
 
+## [1.25.0] - 2025-02-20
+### Changed
+- Reverted compression-based context handling
+- Restored smart truncation for better performance
+- Kept 8000 character limit for larger context
+
+### Fixed
+- Context processing speed issues
+- LLM response time with context
+- Better handling of large Elementor content
+
 ## [1.24.0] - 2025-02-20
 ### Added
 - Content compression for more efficient context handling
