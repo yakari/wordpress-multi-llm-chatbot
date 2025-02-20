@@ -2,6 +2,22 @@
 
 All notable changes to the Multi-LLM Chatbot plugin will be documented in this file.
 
+## [1.24.0] - 2025-02-20
+### Added
+- Content compression for more efficient context handling
+- Smart content compression with LLM instructions
+- Better context size optimization
+
+### Changed
+- Context handling now uses gzip compression
+- Improved content size logging
+- Better content cleanup before compression
+
+### Fixed
+- Context length limitations
+- Content truncation issues
+- Large page content handling
+
 ## [1.23.0] - 2025-02-20
 ### Changed
 - Replaced context button with checkbox for better usability

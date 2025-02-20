@@ -1073,12 +1073,12 @@ class MultiLLMChatbot {
 
     public function get_page_context() {
         $context = '';
-        $max_length = 8000; // Increased from 2000 to 8000 characters
+        $max_length = 8000;
         
         if (is_singular()) {
             $post = get_post();
             if ($post) {
-                // Basic post info
+                // Build context as before
                 $context .= "Title: " . $post->post_title . "\n\n";
                 
                 // Categories and tags
@@ -1111,29 +1111,42 @@ class MultiLLMChatbot {
                     }
                 }
                 
-                // Get content based on editor type
+                // Get and clean content
                 $content = '';
-                
-                // Check if page is built with Elementor
                 if (did_action('elementor/loaded') && \Elementor\Plugin::$instance->documents->get($post->ID)->is_built_with_elementor()) {
-                    error_log('Getting Elementor content');
-                    // Get the rendered Elementor content
                     $elementor_content = \Elementor\Plugin::$instance->frontend->get_builder_content($post->ID, true);
                     $content = wp_strip_all_tags($elementor_content);
                 } else {
-                    error_log('Getting standard content');
-                    // Standard WordPress content
                     $content = wp_strip_all_tags($post->post_content);
                 }
                 
                 // Clean up the content
-                $content = preg_replace('/\s+/', ' ', $content); // Normalize whitespace
-                $content = trim($content); // Remove leading/trailing whitespace
+                $content = preg_replace('/\s+/', ' ', $content);
+                $content = trim($content);
                 
-                // Add content to context
-                $context .= "Content:\n" . $content . "\n\n";
+                // Log original size
+                error_log('Original content length: ' . strlen($content));
                 
-                // Comments summary
+                // Compress content
+                $compressed = gzencode($content, 9);
+                error_log('Compressed content length: ' . strlen($compressed));
+                
+                // Convert to hex for safe transport
+                $hex_compressed = bin2hex($compressed);
+                error_log('Hex compressed length: ' . strlen($hex_compressed));
+                
+                // Add compressed content to context with instructions
+                $context .= "Content (compressed with gzip, hex encoded):\n";
+                $context .= "COMPRESSED_START\n";
+                $context .= $hex_compressed . "\n";
+                $context .= "COMPRESSED_END\n\n";
+                $context .= "Instructions: This content is compressed with gzip and hex encoded. To read it:\n";
+                $context .= "1. Extract the content between COMPRESSED_START and COMPRESSED_END\n";
+                $context .= "2. Convert from hex to binary\n";
+                $context .= "3. Decompress using gzip\n";
+                $context .= "4. Use the decompressed content to answer questions\n\n";
+                
+                // Add any remaining context (comments, etc.)
                 $comments = get_comments(['post_id' => $post->ID, 'status' => 'approve']);
                 if (!empty($comments)) {
                     $context .= "Key Comments:\n";
@@ -1154,38 +1167,6 @@ class MultiLLMChatbot {
                             }
                         }
                     }
-                }
-                
-                // Log content length before truncation
-                error_log('Content length before truncation: ' . strlen($context));
-                
-                // Smarter length limiting while preserving complete sentences
-                if (strlen($context) > $max_length) {
-                    // Find the last complete sentence within the limit
-                    $truncated = substr($context, 0, $max_length);
-                    $last_sentence = strrpos($truncated, '.');
-                    
-                    if ($last_sentence !== false) {
-                        $context = substr($context, 0, $last_sentence + 1);
-                    } else {
-                        // If no sentence boundary found, try other punctuation
-                        $last_punct = max(
-                            strrpos($truncated, '!'),
-                            strrpos($truncated, '?'),
-                            strrpos($truncated, ':'),
-                            strrpos($truncated, ';')
-                        );
-                        if ($last_punct !== false) {
-                            $context = substr($context, 0, $last_punct + 1);
-                        } else {
-                            // If no punctuation found, try to break at a word boundary
-                            $last_space = strrpos($truncated, ' ');
-                            $context = $last_space !== false ? 
-                                substr($context, 0, $last_space) : 
-                                $truncated;
-                        }
-                    }
-                    $context .= "\n\n[Content truncated for length...]";
                 }
                 
                 error_log('Final context length: ' . strlen($context));
