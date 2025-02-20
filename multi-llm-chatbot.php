@@ -433,19 +433,26 @@ class MultiLLMChatbot {
      */
     public function handle_chat_request() {
         error_log('Handling new chat request');
+        error_log('Request headers: ' . print_r(getallheaders(), true));
         
         // Set headers for SSE (Server-Sent Events)
         header('Content-Type: text/event-stream');
         header('Cache-Control: no-cache');
         header('Connection: keep-alive');
         // Add CORS headers
-        header('Access-Control-Allow-Origin: *');
+        header('Access-Control-Allow-Origin: ' . esc_url_raw($_SERVER['HTTP_ORIGIN'] ?? '*'));
         header('Access-Control-Allow-Methods: GET, POST');
         header('Access-Control-Allow-Headers: Content-Type');
+        header('Access-Control-Allow-Credentials: true');
+        
         // Prevent output buffering
         if (ob_get_level()) ob_end_clean();
         @ini_set('output_buffering', 'off');
         @ini_set('zlib.output_compression', false);
+        flush();
+
+        // Send initial response to test connection
+        echo "data: " . json_encode(['content' => 'Connexion établie...']) . "\n\n";
         flush();
 
         $message = sanitize_text_field($_GET['message'] ?? '');

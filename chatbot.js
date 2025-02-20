@@ -157,66 +157,88 @@ document.addEventListener("DOMContentLoaded", function () {
 
         const loadingInterval = setInterval(updateLoadingDots, 500);
 
-        // Add page context to request only if enabled and available
-        const contextParam = (useContext && window.chatbotPageContext) 
-            ? `&context=${encodeURIComponent(window.chatbotPageContext)}` 
-            : '';
+        let retryCount = 0;
+        const maxRetries = 3;
         
-        const eventSource = new EventSource(
-            `${chatbot_ajax.ajaxurl}?action=chatbot_request&message=${encodeURIComponent(message)}${contextParam}`
-        );
-
-        eventSource.onmessage = function(event) {
-            clearInterval(loadingInterval);
-            hasReceivedResponse = true;
-            try {
-                const data = JSON.parse(event.data);
-                if (data.error) {
-                    typingSpan.textContent = `Erreur : ${data.error}`;
-                    eventSource.close();
-                    saveChatHistory(); // Save after error
-                    return;
-                }
-                
-                if (data.content) {
-                    if (data.content === 'Traitement en cours...') {
-                        if (!fullResponse) {
-                            typingSpan.textContent = data.content;
-                        }
-                    } else {
-                        fullResponse += data.content;
-                        // Render markdown
-                        typingSpan.innerHTML = marked.parse(fullResponse);
-                        saveChatHistory(); // Save after each content update
-                    }
-                    chatResponse.scrollTop = chatResponse.scrollHeight;
-                }
-            } catch (error) {
-                console.error('Error parsing SSE message:', error, event.data);
-                if (!fullResponse) {
-                    typingSpan.textContent = 'Erreur: Impossible de traiter la réponse du serveur.';
-                }
-                eventSource.close();
-                saveChatHistory(); // Save after error
-            }
-        };
-
-        eventSource.onerror = function(error) {
-            clearInterval(loadingInterval);
-            console.error('EventSource error:', error);
-            console.error('EventSource readyState:', eventSource.readyState);
-            eventSource.close();
+        function createEventSource() {
+            // Add page context to request only if enabled and available
+            const contextParam = (useContext && window.chatbotPageContext) 
+                ? `&context=${encodeURIComponent(window.chatbotPageContext)}` 
+                : '';
             
-            if (!hasReceivedResponse && !fullResponse) {
-                typingSpan.textContent = 'Erreur : Impossible de contacter le serveur. Veuillez réessayer.';
-                saveChatHistory(); // Save after error
-            }
-        };
+            const eventSource = new EventSource(
+                `${chatbot_ajax.ajaxurl}?action=chatbot_request&message=${encodeURIComponent(message)}${contextParam}`
+            );
+
+            eventSource.onopen = function() {
+                console.log('EventSource connection established');
+                hasReceivedResponse = true;
+            };
+
+            eventSource.onmessage = function(event) {
+                clearInterval(loadingInterval);
+                hasReceivedResponse = true;
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.error) {
+                        typingSpan.textContent = `Erreur : ${data.error}`;
+                        eventSource.close();
+                        saveChatHistory();
+                        return;
+                    }
+                    
+                    if (data.content) {
+                        if (data.content === 'Traitement en cours...') {
+                            if (!fullResponse) {
+                                typingSpan.textContent = data.content;
+                            }
+                        } else {
+                            fullResponse += data.content;
+                            // Render markdown
+                            typingSpan.innerHTML = marked.parse(fullResponse);
+                            saveChatHistory(); // Save after each content update
+                        }
+                        chatResponse.scrollTop = chatResponse.scrollHeight;
+                    }
+                } catch (error) {
+                    console.error('Error parsing SSE message:', error, event.data);
+                    if (!fullResponse) {
+                        typingSpan.textContent = 'Erreur: Impossible de traiter la réponse du serveur.';
+                    }
+                    eventSource.close();
+                    saveChatHistory();
+                }
+            };
+
+            eventSource.onerror = function(error) {
+                clearInterval(loadingInterval);
+                console.error('EventSource error:', error);
+                console.error('EventSource readyState:', eventSource.readyState);
+                
+                // Close current connection
+                eventSource.close();
+                
+                if (!hasReceivedResponse && !fullResponse) {
+                    if (retryCount < maxRetries) {
+                        retryCount++;
+                        console.log(`Retrying connection (attempt ${retryCount} of ${maxRetries})...`);
+                        setTimeout(createEventSource, 1000 * retryCount); // Exponential backoff
+                    } else {
+                        typingSpan.textContent = 'Erreur : Impossible de contacter le serveur après plusieurs tentatives. Veuillez réessayer.';
+                        saveChatHistory();
+                    }
+                }
+            };
+
+            return eventSource;
+        }
+
+        // Initial connection attempt
+        createEventSource();
 
         setTimeout(() => {
             if (!hasReceivedResponse) {
                 clearInterval(loadingInterval);
-                eventSource.close();
                 if (!fullResponse) {
                     typingSpan.textContent = 'Erreur : Temps de réponse dépassé.';
                     saveChatHistory(); // Save after timeout
