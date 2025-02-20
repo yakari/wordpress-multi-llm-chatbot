@@ -2,6 +2,22 @@
 
 All notable changes to the Multi-LLM Chatbot plugin will be documented in this file.
 
+## [1.17.0] - 2025-02-19
+### Added
+- Chat history persistence across page loads
+- Clear chat button to start new conversations
+- Confirmation dialog before clearing chat history
+- Automatic saving of chat messages
+
+### Changed
+- Improved chat header layout
+- Enhanced chat history management
+- Better user experience for chat clearing
+
+### Fixed
+- Chat scroll position after loading history
+- Message saving reliability
+
 ## [1.16.0] - 2025-02-18
 ### Changed
 - Improved chatbot UI and animations

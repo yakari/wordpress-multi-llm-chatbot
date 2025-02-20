@@ -197,9 +197,7 @@ code {
 
 /* Close button */
 #chatbot-minimize {
-    position: absolute;
-    top: 10px;
-    right: 10px;
+    position: static;
     width: 30px;
     height: 30px;
     background: transparent;
@@ -215,6 +213,36 @@ code {
 }
 
 #chatbot-minimize:hover {
+    background: #f0f0f0;
+    color: #333;
+    transform: scale(1.1);
+}
+
+/* Add these new styles */
+.chatbot-header {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+#clear-chat {
+    background: transparent;
+    border: none;
+    color: #666;
+    font-size: 20px;
+    cursor: pointer;
+    padding: 5px;
+    border-radius: 50%;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+}
+
+#clear-chat:hover {
     background: #f0f0f0;
     color: #333;
     transform: scale(1.1);

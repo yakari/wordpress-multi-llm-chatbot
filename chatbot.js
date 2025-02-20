@@ -68,6 +68,33 @@ document.addEventListener("DOMContentLoaded", function () {
         requestAnimationFrame(update);
     }
 
+    // Load saved chat history
+    loadChatHistory();
+
+    // Function to save chat history
+    function saveChatHistory() {
+        const chatHistory = chatResponse.innerHTML;
+        localStorage.setItem('chatbotHistory', chatHistory);
+    }
+
+    // Function to load chat history
+    function loadChatHistory() {
+        const savedHistory = localStorage.getItem('chatbotHistory');
+        if (savedHistory) {
+            chatResponse.innerHTML = savedHistory;
+            scrollToBottom();
+        }
+    }
+
+    // Clear chat history
+    document.getElementById("clear-chat").addEventListener("click", function() {
+        if (confirm("Are you sure you want to clear the chat history?")) {
+            chatResponse.innerHTML = '';
+            localStorage.removeItem('chatbotHistory');
+        }
+    });
+
+    // Update sendMessage function to save history after each message
     function sendMessage() {
         const message = chatInput.value.trim();
         if (!message) return;
@@ -116,6 +143,7 @@ document.addEventListener("DOMContentLoaded", function () {
                 if (data.error) {
                     typingSpan.textContent = `Erreur: ${data.error}`;
                     eventSource.close();
+                    saveChatHistory(); // Save after error
                     return;
                 }
                 
@@ -128,6 +156,7 @@ document.addEventListener("DOMContentLoaded", function () {
                         fullResponse += data.content;
                         // Render markdown
                         typingSpan.innerHTML = marked.parse(fullResponse);
+                        saveChatHistory(); // Save after each content update
                     }
                     chatResponse.scrollTop = chatResponse.scrollHeight;
                 }
@@ -137,6 +166,7 @@ document.addEventListener("DOMContentLoaded", function () {
                     typingSpan.textContent = 'Erreur: Impossible de traiter la réponse du serveur.';
                 }
                 eventSource.close();
+                saveChatHistory(); // Save after error
             }
         };
 
@@ -147,6 +177,7 @@ document.addEventListener("DOMContentLoaded", function () {
             
             if (!hasReceivedResponse && !fullResponse) {
                 typingSpan.textContent = 'Erreur: Impossible de contacter le serveur.';
+                saveChatHistory(); // Save after error
             }
         };
 
@@ -156,9 +187,12 @@ document.addEventListener("DOMContentLoaded", function () {
                 eventSource.close();
                 if (!fullResponse) {
                     typingSpan.textContent = 'Erreur: Temps de réponse dépassé.';
+                    saveChatHistory(); // Save after timeout
                 }
             }
         }, 60000);
+
+        scrollToBottom();
     }
 
     // Add click outside handler
