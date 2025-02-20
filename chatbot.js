@@ -156,113 +156,101 @@ document.addEventListener("DOMContentLoaded", function () {
         };
 
         const loadingInterval = setInterval(updateLoadingDots, 500);
-
         let retryCount = 0;
         const maxRetries = 3;
-        let currentEventSource = null;
-        
-        function createEventSource() {
-            if (currentEventSource) {
-                currentEventSource.close();
+
+        async function fetchStream() {
+            if (retryCount >= maxRetries) {
+                console.error('Max retries reached');
+                typingSpan.textContent = 'Erreur : Impossible de contacter le serveur après plusieurs tentatives. Veuillez réessayer.';
+                saveChatHistory();
+                return;
             }
 
             const contextParam = (useContext && window.chatbotPageContext) 
                 ? `&context=${encodeURIComponent(window.chatbotPageContext)}` 
                 : '';
             
-            // Add nonce if available
             const nonceParam = chatbot_ajax.nonce 
                 ? `&_wpnonce=${chatbot_ajax.nonce}` 
                 : '';
             
             const url = `${chatbot_ajax.ajaxurl}?action=chatbot_request&message=${encodeURIComponent(message)}${contextParam}${nonceParam}&_=${Date.now()}`;
-            console.log('Creating EventSource with URL:', url);
             
-            currentEventSource = new EventSource(url, {
-                withCredentials: true
-            });
-
-            currentEventSource.onopen = function() {
-                console.log('EventSource connection established');
-                console.log('ReadyState:', currentEventSource.readyState);
-                console.log('Connection details:', {
-                    withCredentials: currentEventSource.withCredentials,
-                    url: currentEventSource.url
+            try {
+                const response = await fetch(url, {
+                    credentials: 'same-origin',
+                    headers: {
+                        'Accept': 'text/event-stream',
+                        'Cache-Control': 'no-cache',
+                    }
                 });
-                hasReceivedResponse = false; // Reset on new connection
-            };
 
-            currentEventSource.onmessage = function(event) {
-                console.log('Received message:', event.data);
-                clearInterval(loadingInterval);
-                hasReceivedResponse = true;
-                try {
-                    const data = JSON.parse(event.data);
-                    if (data.error) {
-                        console.error('Server returned error:', data.error);
-                        typingSpan.textContent = `Erreur : ${data.error}`;
-                        currentEventSource.close();
-                        saveChatHistory();
-                        return;
-                    }
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+
+                while (true) {
+                    const {value, done} = await reader.read();
+                    if (done) break;
                     
-                    if (data.content) {
-                        if (data.content === 'Traitement en cours...') {
-                            if (!fullResponse) {
-                                typingSpan.textContent = data.content;
+                    buffer += decoder.decode(value, {stream: true});
+                    const lines = buffer.split('\n');
+                    
+                    // Process all complete lines
+                    buffer = lines.pop() || ''; // Keep any incomplete line
+                    
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const data = JSON.parse(line.slice(6));
+                            if (data.error) {
+                                console.error('Server returned error:', data.error);
+                                typingSpan.textContent = `Erreur : ${data.error}`;
+                                clearInterval(loadingInterval);
+                                saveChatHistory();
+                                return;
                             }
-                        } else {
-                            fullResponse += data.content;
-                            // Render markdown
-                            typingSpan.innerHTML = marked.parse(fullResponse);
-                            saveChatHistory(); // Save after each content update
+                            
+                            if (data.content) {
+                                hasReceivedResponse = true;
+                                clearInterval(loadingInterval);
+                                
+                                if (data.content === 'Connexion établie...') {
+                                    console.log('Connection established');
+                                    continue;
+                                }
+                                
+                                fullResponse += data.content;
+                                typingSpan.innerHTML = marked.parse(fullResponse);
+                                saveChatHistory();
+                                chatResponse.scrollTop = chatResponse.scrollHeight;
+                            }
                         }
-                        chatResponse.scrollTop = chatResponse.scrollHeight;
-                    }
-                } catch (error) {
-                    console.error('Error parsing message:', error);
-                    if (!fullResponse) {
-                        typingSpan.textContent = 'Erreur: Impossible de traiter la réponse du serveur.';
-                    }
-                    currentEventSource.close();
-                    saveChatHistory();
-                }
-            };
-
-            currentEventSource.onerror = function(error) {
-                console.error('EventSource error:', error);
-                console.error('ReadyState:', currentEventSource.readyState);
-                console.error('URL:', currentEventSource.url);
-                
-                // Close current connection
-                currentEventSource.close();
-                
-                if (!hasReceivedResponse && !fullResponse) {
-                    if (retryCount < maxRetries) {
-                        retryCount++;
-                        const delay = Math.min(1000 * Math.pow(2, retryCount), 10000); // Exponential backoff with 10s max
-                        console.log(`Retrying connection in ${delay}ms (attempt ${retryCount} of ${maxRetries})...`);
-                        setTimeout(createEventSource, delay);
-                    } else {
-                        console.error('Max retries reached');
-                        typingSpan.textContent = 'Erreur : Impossible de contacter le serveur après plusieurs tentatives. Veuillez réessayer.';
-                        saveChatHistory();
                     }
                 }
-            };
-
-            return currentEventSource;
+            } catch (error) {
+                console.error('Fetch error:', error);
+                retryCount++;
+                const delay = Math.min(1000 * Math.pow(2, retryCount), 10000);
+                console.log(`Retrying in ${delay}ms (attempt ${retryCount} of ${maxRetries})...`);
+                setTimeout(fetchStream, delay);
+            }
         }
 
-        // Initial connection attempt
-        createEventSource();
+        // Start the fetch stream
+        fetchStream();
 
+        // Timeout handler
         setTimeout(() => {
             if (!hasReceivedResponse) {
                 clearInterval(loadingInterval);
                 if (!fullResponse) {
                     typingSpan.textContent = 'Erreur : Temps de réponse dépassé.';
-                    saveChatHistory(); // Save after timeout
+                    saveChatHistory();
                 }
             }
         }, 60000);

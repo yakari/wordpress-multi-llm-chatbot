@@ -438,34 +438,12 @@ class MultiLLMChatbot {
      * Main entry point for all chat interactions
      */
     public function handle_chat_request() {
-        // Allow cross-origin requests from the same domain
-        $allowed_origin = parse_url(get_site_url(), PHP_URL_HOST);
-        $request_origin = parse_url($_SERVER['HTTP_ORIGIN'] ?? '', PHP_URL_HOST);
-        
-        error_log('Allowed origin: ' . $allowed_origin);
-        error_log('Request origin: ' . $request_origin);
-        
-        if ($allowed_origin === $request_origin) {
-            header('Access-Control-Allow-Origin: ' . $_SERVER['HTTP_ORIGIN']);
-        } else {
-            error_log('Origin mismatch - allowed: ' . $allowed_origin . ', request: ' . $request_origin);
-            header('Access-Control-Allow-Origin: ' . get_site_url());
-        }
-        
-        // Other headers
+        // Allow same-origin requests
+        header('Access-Control-Allow-Origin: ' . get_site_url());
+        header('Access-Control-Allow-Credentials: true');
         header('Content-Type: text/event-stream');
         header('Cache-Control: no-store, no-cache, must-revalidate');
         header('Pragma: no-cache');
-        header('X-Accel-Buffering: no');
-        header('Access-Control-Allow-Credentials: true');
-        header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
-        header('Access-Control-Allow-Headers: Content-Type, Authorization');
-        
-        // Handle preflight requests
-        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-            http_response_code(200);
-            exit();
-        }
         
         // Check nonce for authenticated users
         if (is_user_logged_in()) {
