@@ -185,12 +185,20 @@ document.addEventListener("DOMContentLoaded", function () {
                 : '';
             
             const url = `${chatbot_ajax.ajaxurl}?action=chatbot_request&message=${encodeURIComponent(message)}${contextParam}${nonceParam}&_=${Date.now()}`;
+            
+            // Log the full request details
             console.log('Sending chat request:', {
                 config: window.chatbotConfig,
-                useContext,
-                hasContextParam: Boolean(contextParam),
-                url,
-                message
+                request: {
+                    url,
+                    message,
+                    useContext,
+                    hasContextParam: Boolean(contextParam),
+                    provider: window.chatbotConfig.provider,
+                    isAssistantMode: window.chatbotConfig.useAssistant,
+                    assistantId: window.chatbotConfig.assistantId,
+                    hasDefinition: window.chatbotConfig.hasDefinition
+                }
             });
             
             try {
@@ -200,6 +208,13 @@ document.addEventListener("DOMContentLoaded", function () {
                         'Accept': 'text/event-stream',
                         'Cache-Control': 'no-cache',
                     }
+                });
+
+                // Log response headers
+                console.log('Response headers:', {
+                    status: response.status,
+                    statusText: response.statusText,
+                    headers: Object.fromEntries(response.headers.entries())
                 });
 
                 if (!response.ok) {
@@ -223,10 +238,11 @@ document.addEventListener("DOMContentLoaded", function () {
                     for (const line of lines) {
                         if (line.startsWith('data: ')) {
                             const data = JSON.parse(line.slice(6));
-                            console.log('Server response:', {
+                            console.log('Server response chunk:', {
                                 data,
                                 provider: window.chatbotConfig.provider,
-                                usingAssistant: window.chatbotConfig.useAssistant
+                                usingAssistant: window.chatbotConfig.useAssistant,
+                                timestamp: new Date().toISOString()
                             });
                             if (data.error) {
                                 console.error('Server returned error:', data.error);
@@ -257,6 +273,11 @@ document.addEventListener("DOMContentLoaded", function () {
                 console.error('Request failed:', {
                     error,
                     config: window.chatbotConfig,
+                    request: {
+                        url,
+                        provider: window.chatbotConfig.provider,
+                        isAssistantMode: window.chatbotConfig.useAssistant
+                    },
                     retryCount,
                     maxRetries
                 });
