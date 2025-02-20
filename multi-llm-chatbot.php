@@ -655,7 +655,7 @@ class MultiLLMChatbot {
             $page_context = sanitize_text_field($_GET['context'] ?? '');
             $full_message = $message;
             if (!empty($page_context)) {
-                error_log('Adding context to assistant message. Context length: ' . strlen($page_context));
+                error_log('Adding context to OpenAI message. Context length: ' . strlen($page_context));
                 $full_message = "Context:\n$page_context\n\nUser Question: $message";
             }
 
@@ -675,6 +675,7 @@ class MultiLLMChatbot {
             
             // Poll for completion
             $this->poll_openai_completion($base_url, $headers, $thread_id, $run_id);
+            
         } else if ($provider === 'mistral') {
             $headers = [
                 'Authorization: Bearer ' . $api_key,
@@ -683,18 +684,27 @@ class MultiLLMChatbot {
             
             $base_url = 'https://api.mistral.ai/v1/chat/completions';
             
+            // Get agent definition
+            $definition = get_option('chatbot_mistral_definition', '');
+            
             // Add context to message if available
             $page_context = sanitize_text_field($_GET['context'] ?? '');
             $messages = [];
             
-            if (!empty($page_context)) {
-                error_log('Adding context to Mistral message. Context length: ' . strlen($page_context));
-                $messages[] = [
-                    'role' => 'system',
-                    'content' => "Current page content:\n\n$page_context\n\nPlease use this content as context when relevant to answer the user's questions."
-                ];
+            // Add system message with definition and context if available
+            if (!empty($definition) || !empty($page_context)) {
+                $system_content = '';
+                if (!empty($definition)) {
+                    $system_content .= $definition . "\n\n";
+                }
+                if (!empty($page_context)) {
+                    error_log('Adding context to Mistral message. Context length: ' . strlen($page_context));
+                    $system_content .= "Current page content:\n\n$page_context\n\nPlease use this content as context when relevant to answer questions.";
+                }
+                $messages[] = ['role' => 'system', 'content' => $system_content];
             }
             
+            // Add user message
             $messages[] = ['role' => 'user', 'content' => $message];
             
             $body = json_encode([
@@ -706,8 +716,8 @@ class MultiLLMChatbot {
             error_log('Mistral request payload: ' . print_r([
                 'url' => $base_url,
                 'messages_count' => count($messages),
-                'context_present' => !empty($page_context),
-                'user_message' => $message
+                'has_definition' => !empty($definition),
+                'context_present' => !empty($page_context)
             ], true));
             
             $this->handle_standard_request($provider, $base_url, $headers, $body);
