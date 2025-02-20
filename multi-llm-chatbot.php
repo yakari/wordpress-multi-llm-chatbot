@@ -1073,6 +1073,7 @@ class MultiLLMChatbot {
 
     public function get_page_context() {
         $context = '';
+        $max_length = 8000; // Increased from 2000 to 8000 characters
         
         if (is_singular()) {
             $post = get_post();
@@ -1125,6 +1126,10 @@ class MultiLLMChatbot {
                     $content = wp_strip_all_tags($post->post_content);
                 }
                 
+                // Clean up the content
+                $content = preg_replace('/\s+/', ' ', $content); // Normalize whitespace
+                $content = trim($content); // Remove leading/trailing whitespace
+                
                 // Add content to context
                 $context .= "Content:\n" . $content . "\n\n";
                 
@@ -1152,12 +1157,34 @@ class MultiLLMChatbot {
                 }
                 
                 // Log content length before truncation
-                error_log('Content length before truncation: ' . strlen($content));
+                error_log('Content length before truncation: ' . strlen($context));
                 
-                // Limit length while preserving complete sentences
-                if (strlen($context) > 2000) {
-                    $context = substr($context, 0, 2000);
-                    $context = substr($context, 0, strrpos($context, '.') + 1);
+                // Smarter length limiting while preserving complete sentences
+                if (strlen($context) > $max_length) {
+                    // Find the last complete sentence within the limit
+                    $truncated = substr($context, 0, $max_length);
+                    $last_sentence = strrpos($truncated, '.');
+                    
+                    if ($last_sentence !== false) {
+                        $context = substr($context, 0, $last_sentence + 1);
+                    } else {
+                        // If no sentence boundary found, try other punctuation
+                        $last_punct = max(
+                            strrpos($truncated, '!'),
+                            strrpos($truncated, '?'),
+                            strrpos($truncated, ':'),
+                            strrpos($truncated, ';')
+                        );
+                        if ($last_punct !== false) {
+                            $context = substr($context, 0, $last_punct + 1);
+                        } else {
+                            // If no punctuation found, try to break at a word boundary
+                            $last_space = strrpos($truncated, ' ');
+                            $context = $last_space !== false ? 
+                                substr($context, 0, $last_space) : 
+                                $truncated;
+                        }
+                    }
                     $context .= "\n\n[Content truncated for length...]";
                 }
                 
