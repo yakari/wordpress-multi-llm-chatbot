@@ -438,6 +438,17 @@ class MultiLLMChatbot {
      * Main entry point for all chat interactions
      */
     public function handle_chat_request() {
+        // Add provider info logging
+        $provider = get_option('chatbot_provider', 'openai');
+        $use_assistant = get_option("chatbot_{$provider}_use_assistant");
+        $assistant_id = get_option("chatbot_{$provider}_assistant_id");
+        
+        error_log('Chat request details:');
+        error_log("- Provider: $provider");
+        error_log("- Use Assistant: " . ($use_assistant ? 'yes' : 'no'));
+        error_log("- Assistant ID: " . ($assistant_id ?: 'none'));
+        error_log("- Context Enabled: " . (get_option('chatbot_use_context', '0') === '1' ? 'yes' : 'no'));
+        
         // Allow same-origin requests
         header('Access-Control-Allow-Origin: ' . get_site_url());
         header('Access-Control-Allow-Credentials: true');
@@ -474,10 +485,7 @@ class MultiLLMChatbot {
             }
 
             // Get provider configuration
-            $provider = get_option('chatbot_provider', 'openai');
             $api_key = get_option("chatbot_{$provider}_api_key");
-            $assistant_id = get_option("chatbot_{$provider}_assistant_id");
-            $use_assistant = get_option("chatbot_{$provider}_use_assistant");
             $definition = get_option("chatbot_{$provider}_definition", '');
 
             // Add page context to system instructions if available
@@ -658,6 +666,8 @@ class MultiLLMChatbot {
      */
     private function handle_assistant_request($provider, $api_key, $assistant_id, $message) {
         error_log("Processing assistant request for $provider");
+        error_log("Assistant ID: $assistant_id");
+        error_log("Message length: " . strlen($message));
         
         if ($provider === 'openai') {
             $headers = [
@@ -707,6 +717,10 @@ class MultiLLMChatbot {
             ];
             
             $base_url = 'https://api.mistral.ai/v1/chat/completions';
+            
+            error_log('Mistral configuration:');
+            error_log('- Definition: ' . substr(get_option('chatbot_mistral_definition', ''), 0, 100) . '...');
+            error_log('- Context present: ' . (isset($_GET['context']) ? 'yes' : 'no'));
             
             // Get agent definition
             $definition = get_option('chatbot_mistral_definition', '');

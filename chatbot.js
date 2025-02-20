@@ -100,14 +100,23 @@ document.addEventListener("DOMContentLoaded", function () {
     if (window.chatbotContextEnabled) {
         const toggleContextCheckbox = document.getElementById("toggle-context");
         if (toggleContextCheckbox) {
+            console.log('Context configuration:', {
+                enabled: window.chatbotContextEnabled,
+                isSingular: window.chatbotIsSingular,
+                hasContext: Boolean(window.chatbotPageContext),
+                contextLength: window.chatbotPageContext?.length || 0
+            });
+            
             if (window.chatbotIsSingular && window.chatbotPageContext) {
                 toggleContextCheckbox.addEventListener("change", function() {
                     useContext = this.checked;
+                    console.log('Context toggle changed:', {
+                        useContext,
+                        contextAvailable: Boolean(window.chatbotPageContext)
+                    });
                 });
             } else {
-                toggleContextCheckbox.disabled = true;
-                toggleContextCheckbox.parentElement.classList.add('disabled');
-                toggleContextCheckbox.parentElement.title = 'Le contexte n\'est disponible que sur les articles et les pages';
+                console.log('Context disabled - not a singular page or no context available');
             }
         }
     } else {
@@ -176,6 +185,12 @@ document.addEventListener("DOMContentLoaded", function () {
                 : '';
             
             const url = `${chatbot_ajax.ajaxurl}?action=chatbot_request&message=${encodeURIComponent(message)}${contextParam}${nonceParam}&_=${Date.now()}`;
+            console.log('Sending chat request:', {
+                useContext,
+                hasContextParam: Boolean(contextParam),
+                url,
+                message
+            });
             
             try {
                 const response = await fetch(url, {
@@ -207,6 +222,7 @@ document.addEventListener("DOMContentLoaded", function () {
                     for (const line of lines) {
                         if (line.startsWith('data: ')) {
                             const data = JSON.parse(line.slice(6));
+                            console.log('Received response chunk:', data);
                             if (data.error) {
                                 console.error('Server returned error:', data.error);
                                 typingSpan.textContent = `Erreur : ${data.error}`;
@@ -233,7 +249,11 @@ document.addEventListener("DOMContentLoaded", function () {
                     }
                 }
             } catch (error) {
-                console.error('Fetch error:', error);
+                console.error('Request failed:', {
+                    error,
+                    retryCount,
+                    maxRetries
+                });
                 retryCount++;
                 const delay = Math.min(1000 * Math.pow(2, retryCount), 10000);
                 console.log(`Retrying in ${delay}ms (attempt ${retryCount} of ${maxRetries})...`);
