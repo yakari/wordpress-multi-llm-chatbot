@@ -159,30 +159,37 @@ document.addEventListener("DOMContentLoaded", function () {
 
         let retryCount = 0;
         const maxRetries = 3;
+        let currentEventSource = null;
         
         function createEventSource() {
-            // Add page context to request only if enabled and available
+            if (currentEventSource) {
+                currentEventSource.close();
+            }
+
             const contextParam = (useContext && window.chatbotPageContext) 
                 ? `&context=${encodeURIComponent(window.chatbotPageContext)}` 
                 : '';
             
-            const eventSource = new EventSource(
-                `${chatbot_ajax.ajaxurl}?action=chatbot_request&message=${encodeURIComponent(message)}${contextParam}`
-            );
+            const url = `${chatbot_ajax.ajaxurl}?action=chatbot_request&message=${encodeURIComponent(message)}${contextParam}`;
+            console.log('Creating EventSource with URL:', url);
+            
+            currentEventSource = new EventSource(url);
 
-            eventSource.onopen = function() {
+            currentEventSource.onopen = function() {
                 console.log('EventSource connection established');
-                hasReceivedResponse = true;
+                console.log('ReadyState:', currentEventSource.readyState);
             };
 
-            eventSource.onmessage = function(event) {
+            currentEventSource.onmessage = function(event) {
+                console.log('Received message:', event.data);
                 clearInterval(loadingInterval);
                 hasReceivedResponse = true;
                 try {
                     const data = JSON.parse(event.data);
                     if (data.error) {
+                        console.error('Server returned error:', data.error);
                         typingSpan.textContent = `Erreur : ${data.error}`;
-                        eventSource.close();
+                        currentEventSource.close();
                         saveChatHistory();
                         return;
                     }
@@ -201,36 +208,38 @@ document.addEventListener("DOMContentLoaded", function () {
                         chatResponse.scrollTop = chatResponse.scrollHeight;
                     }
                 } catch (error) {
-                    console.error('Error parsing SSE message:', error, event.data);
+                    console.error('Error parsing message:', error);
                     if (!fullResponse) {
                         typingSpan.textContent = 'Erreur: Impossible de traiter la réponse du serveur.';
                     }
-                    eventSource.close();
+                    currentEventSource.close();
                     saveChatHistory();
                 }
             };
 
-            eventSource.onerror = function(error) {
+            currentEventSource.onerror = function(error) {
                 clearInterval(loadingInterval);
                 console.error('EventSource error:', error);
-                console.error('EventSource readyState:', eventSource.readyState);
+                console.error('ReadyState:', currentEventSource.readyState);
+                console.error('Status:', currentEventSource.status);
                 
                 // Close current connection
-                eventSource.close();
+                currentEventSource.close();
                 
                 if (!hasReceivedResponse && !fullResponse) {
                     if (retryCount < maxRetries) {
                         retryCount++;
                         console.log(`Retrying connection (attempt ${retryCount} of ${maxRetries})...`);
-                        setTimeout(createEventSource, 1000 * retryCount); // Exponential backoff
+                        setTimeout(createEventSource, 1000 * retryCount);
                     } else {
+                        console.error('Max retries reached');
                         typingSpan.textContent = 'Erreur : Impossible de contacter le serveur après plusieurs tentatives. Veuillez réessayer.';
                         saveChatHistory();
                     }
                 }
             };
 
-            return eventSource;
+            return currentEventSource;
         }
 
         // Initial connection attempt

@@ -434,65 +434,80 @@ class MultiLLMChatbot {
     public function handle_chat_request() {
         error_log('Handling new chat request');
         error_log('Request headers: ' . print_r(getallheaders(), true));
+        error_log('Server software: ' . $_SERVER['SERVER_SOFTWARE']);
         
         // Set headers for SSE (Server-Sent Events)
         header('Content-Type: text/event-stream');
         header('Cache-Control: no-cache');
         header('Connection: keep-alive');
-        // Add CORS headers
-        header('Access-Control-Allow-Origin: ' . esc_url_raw($_SERVER['HTTP_ORIGIN'] ?? '*'));
+        
+        // Add CORS headers - use the actual domain instead of wildcard
+        $origin = $_SERVER['HTTP_ORIGIN'] ?? '*';
+        error_log('Request origin: ' . $origin);
+        header('Access-Control-Allow-Origin: ' . esc_url_raw($origin));
         header('Access-Control-Allow-Methods: GET, POST');
         header('Access-Control-Allow-Headers: Content-Type');
         header('Access-Control-Allow-Credentials: true');
         
+        // Prevent FastCGI from buffering
+        if (function_exists('apache_setenv')) {
+            apache_setenv('no-gzip', 1);
+        }
         // Prevent output buffering
-        if (ob_get_level()) ob_end_clean();
+        while (ob_get_level()) {
+            ob_end_clean();
+        }
         @ini_set('output_buffering', 'off');
         @ini_set('zlib.output_compression', false);
+        @ini_set('implicit_flush', true);
         flush();
-
-        // Send initial response to test connection
-        echo "data: " . json_encode(['content' => 'Connexion établie...']) . "\n\n";
-        flush();
-
-        $message = sanitize_text_field($_GET['message'] ?? '');
-        $page_context = sanitize_text_field($_GET['context'] ?? '');
-        
-        if (empty($message)) {
-            error_log('Error: Empty message received');
-            echo "data: " . json_encode(['error' => 'Message required']) . "\n\n";
-            return;
-        }
-
-        // Get provider configuration
-        $provider = get_option('chatbot_provider', 'openai');
-        $api_key = get_option("chatbot_{$provider}_api_key");
-        $assistant_id = get_option("chatbot_{$provider}_assistant_id");
-        $use_assistant = get_option("chatbot_{$provider}_use_assistant");
-        $definition = get_option("chatbot_{$provider}_definition", '');
-
-        // Add page context to system instructions if available
-        if (!empty($page_context)) {
-            error_log('Adding page context to request. Context length: ' . strlen($page_context));
-            error_log('Context preview: ' . substr($page_context, 0, 200) . '...');
-            $context_prompt = "Current page content:\n\n$page_context\n\nPlease use this content as context when relevant to answer the user's questions.";
-            $definition = $definition ? $definition . "\n\n" . $context_prompt : $context_prompt;
-            error_log('Final system message length: ' . strlen($definition));
-        } else {
-            error_log('No page context provided in request');
-        }
-
-        error_log("Provider: $provider");
-        error_log("Assistant enabled: " . ($use_assistant ? 'yes' : 'no'));
-        error_log("Assistant ID present: " . (!empty($assistant_id) ? 'yes' : 'no'));
-
-        if (empty($api_key)) {
-            error_log('Error: No API key configured');
-            echo "data: " . json_encode(['error' => 'API key required']) . "\n\n";
-            return;
-        }
 
         try {
+            // Send initial response to test connection
+            echo "data: " . json_encode(['content' => 'Connexion établie...']) . "\n\n";
+            flush();
+            
+            // Small delay to ensure the connection message is received
+            usleep(100000); // 100ms delay
+            
+            // Rest of the handler...
+            $message = sanitize_text_field($_GET['message'] ?? '');
+            $page_context = sanitize_text_field($_GET['context'] ?? '');
+            
+            if (empty($message)) {
+                error_log('Error: Empty message received');
+                echo "data: " . json_encode(['error' => 'Message required']) . "\n\n";
+                return;
+            }
+
+            // Get provider configuration
+            $provider = get_option('chatbot_provider', 'openai');
+            $api_key = get_option("chatbot_{$provider}_api_key");
+            $assistant_id = get_option("chatbot_{$provider}_assistant_id");
+            $use_assistant = get_option("chatbot_{$provider}_use_assistant");
+            $definition = get_option("chatbot_{$provider}_definition", '');
+
+            // Add page context to system instructions if available
+            if (!empty($page_context)) {
+                error_log('Adding page context to request. Context length: ' . strlen($page_context));
+                error_log('Context preview: ' . substr($page_context, 0, 200) . '...');
+                $context_prompt = "Current page content:\n\n$page_context\n\nPlease use this content as context when relevant to answer the user's questions.";
+                $definition = $definition ? $definition . "\n\n" . $context_prompt : $context_prompt;
+                error_log('Final system message length: ' . strlen($definition));
+            } else {
+                error_log('No page context provided in request');
+            }
+
+            error_log("Provider: $provider");
+            error_log("Assistant enabled: " . ($use_assistant ? 'yes' : 'no'));
+            error_log("Assistant ID present: " . (!empty($assistant_id) ? 'yes' : 'no'));
+
+            if (empty($api_key)) {
+                error_log('Error: No API key configured');
+                echo "data: " . json_encode(['error' => 'API key required']) . "\n\n";
+                return;
+            }
+
             // Route to appropriate handler based on configuration
             if (($provider === 'openai' || $provider === 'mistral') && 
                 $use_assistant && !empty($assistant_id)) {
@@ -503,9 +518,9 @@ class MultiLLMChatbot {
                 $this->handle_chat_api_request($provider, $api_key, $message, $definition);
             }
         } catch (Exception $e) {
-            error_log('Chat request error: ' . $e->getMessage());
+            error_log('Error in chat request handler: ' . $e->getMessage());
             error_log('Stack trace: ' . $e->getTraceAsString());
-            echo "data: " . json_encode(['error' => 'Error processing request']) . "\n\n";
+            echo "data: " . json_encode(['error' => 'Erreur serveur interne']) . "\n\n";
         }
     }
 
