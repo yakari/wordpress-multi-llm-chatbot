@@ -3,7 +3,7 @@
  * Plugin Name: Multi-LLM Chatbot
  * Plugin URI: https://github.com/yakari/wordpress-multi-llm-chatbot
  * Description: Plugin WordPress pour intégrer un chatbot compatible avec OpenAI, Claude, Perplexity, Google Gemini et Mistral.
- * Version: 1.23.0
+ * Version: 1.25.0
  * Author: Yann Poirier <yakari@yakablog.info>
  * Author URI: https://foliesenbaie.fr
  * License: Apache-2.0
