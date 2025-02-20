@@ -1110,8 +1110,23 @@ class MultiLLMChatbot {
                     }
                 }
                 
-                // Main content
-                $context .= "Content:\n" . wp_strip_all_tags($post->post_content) . "\n\n";
+                // Get content based on editor type
+                $content = '';
+                
+                // Check if page is built with Elementor
+                if (did_action('elementor/loaded') && \Elementor\Plugin::$instance->documents->get($post->ID)->is_built_with_elementor()) {
+                    error_log('Getting Elementor content');
+                    // Get the rendered Elementor content
+                    $elementor_content = \Elementor\Plugin::$instance->frontend->get_builder_content($post->ID, true);
+                    $content = wp_strip_all_tags($elementor_content);
+                } else {
+                    error_log('Getting standard content');
+                    // Standard WordPress content
+                    $content = wp_strip_all_tags($post->post_content);
+                }
+                
+                // Add content to context
+                $context .= "Content:\n" . $content . "\n\n";
                 
                 // Comments summary
                 $comments = get_comments(['post_id' => $post->ID, 'status' => 'approve']);
@@ -1136,12 +1151,17 @@ class MultiLLMChatbot {
                     }
                 }
                 
+                // Log content length before truncation
+                error_log('Content length before truncation: ' . strlen($content));
+                
                 // Limit length while preserving complete sentences
                 if (strlen($context) > 2000) {
                     $context = substr($context, 0, 2000);
                     $context = substr($context, 0, strrpos($context, '.') + 1);
                     $context .= "\n\n[Content truncated for length...]";
                 }
+                
+                error_log('Final context length: ' . strlen($context));
             }
         }
         
