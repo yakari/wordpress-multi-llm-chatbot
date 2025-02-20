@@ -3,7 +3,7 @@
  * Plugin Name: Multi-LLM Chatbot
  * Plugin URI: https://github.com/yakari/wordpress-multi-llm-chatbot
  * Description: Plugin WordPress pour intégrer un chatbot compatible avec OpenAI, Claude, Perplexity, Google Gemini et Mistral.
- * Version: 1.25.0
+ * Version: 1.26.0
  * Author: Yann Poirier <yakari@yakablog.info>
  * Author URI: https://foliesenbaie.fr
  * License: Apache-2.0
@@ -434,9 +434,19 @@ class MultiLLMChatbot {
     public function handle_chat_request() {
         error_log('Handling new chat request');
         
+        // Set headers for SSE (Server-Sent Events)
         header('Content-Type: text/event-stream');
         header('Cache-Control: no-cache');
         header('Connection: keep-alive');
+        // Add CORS headers
+        header('Access-Control-Allow-Origin: *');
+        header('Access-Control-Allow-Methods: GET, POST');
+        header('Access-Control-Allow-Headers: Content-Type');
+        // Prevent output buffering
+        if (ob_get_level()) ob_end_clean();
+        @ini_set('output_buffering', 'off');
+        @ini_set('zlib.output_compression', false);
+        flush();
 
         $message = sanitize_text_field($_GET['message'] ?? '');
         $page_context = sanitize_text_field($_GET['context'] ?? '');
@@ -1061,7 +1071,11 @@ class MultiLLMChatbot {
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_WRITEFUNCTION => function($curl, $data) use ($provider) {
                 return $this->handle_streaming_response($data, $provider);
-            }
+            },
+            // Add these options for better error handling
+            CURLOPT_FAILONERROR => true,
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_TIMEOUT => 60
         ]);
 
         $result = curl_exec($ch);
@@ -1069,12 +1083,14 @@ class MultiLLMChatbot {
         if (curl_errno($ch)) {
             $error = curl_error($ch);
             error_log("Curl error in standard request: $error");
+            error_log("Curl info: " . print_r(curl_getinfo($ch), true));
             echo "data: " . json_encode(['error' => "API request failed: $error"]) . "\n\n";
         }
         
         $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         if ($http_code !== 200) {
             error_log("HTTP error in standard request: $http_code");
+            error_log("Response: " . $result);
             echo "data: " . json_encode(['error' => "API returned error: $http_code"]) . "\n\n";
         }
         

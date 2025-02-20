@@ -204,10 +204,11 @@ document.addEventListener("DOMContentLoaded", function () {
         eventSource.onerror = function(error) {
             clearInterval(loadingInterval);
             console.error('EventSource error:', error);
+            console.error('EventSource readyState:', eventSource.readyState);
             eventSource.close();
             
             if (!hasReceivedResponse && !fullResponse) {
-                typingSpan.textContent = 'Erreur : Impossible de contacter le serveur.';
+                typingSpan.textContent = 'Erreur : Impossible de contacter le serveur. Veuillez réessayer.';
                 saveChatHistory(); // Save after error
             }
         };

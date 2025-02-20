@@ -2,6 +2,17 @@
 
 All notable changes to the Multi-LLM Chatbot plugin will be documented in this file.
 
+## [1.26.0] - 2025-02-20
+### Added
+- Better CORS handling for production environments
+- Improved error logging for API requests
+- Enhanced SSE error handling
+
+### Fixed
+- Production server compatibility issues
+- EventSource connection errors
+- Mistral agent handling in production
+
 ## [1.25.0] - 2025-02-20
 ### Changed
 - Reverted compression-based context handling
