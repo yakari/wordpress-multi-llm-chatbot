@@ -1,0 +1,120 @@
+/* Bouton pour ouvrir/fermer le chatbot */
+#chatbot-toggle {
+    position: fixed;
+    bottom: 20px;
+    left: 20px;
+    width: 50px;
+    height: 50px;
+    background: #007bff;
+    color: white;
+    font-size: 24px;
+    text-align: center;
+    line-height: 50px;
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.2);
+    z-index: 99999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+
+/* Conteneur du chatbot */
+#chatbot-container {
+    position: fixed;
+    bottom: 80px;
+    left: 20px;
+    width: 300px;
+    background: white;
+    border: 1px solid #ccc;
+    box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.1);
+    padding: 10px;
+    border-radius: 8px;
+    font-family: Arial, sans-serif;
+    font-size: 14px;
+    display: none;
+    z-index: 1000;
+}
+
+#chat-response {
+    height: 150px;
+    overflow-y: auto;
+    border-bottom: 1px solid #ddd;
+    padding-bottom: 5px;
+    margin-bottom: 5px;
+    font-size: 14px;
+    line-height: 1.4;
+}
+
+#chat-input {
+    width: calc(100% - 60px);
+    padding: 5px;
+    margin-right: 5px;
+    font-size: 14px;
+}
+
+#send-chat {
+    padding: 5px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+/* Markdown styles */
+#chat-response code {
+    background-color: #f6f8fa;
+    padding: 2px 4px;
+    border-radius: 3px;
+    font-family: monospace;
+    font-size: 13px;
+}
+
+#chat-response pre {
+    background-color: #f6f8fa;
+    padding: 16px;
+    border-radius: 6px;
+    overflow-x: auto;
+    font-size: 13px;
+}
+
+#chat-response pre code {
+    background-color: transparent;
+    padding: 0;
+}
+
+#chat-response blockquote {
+    border-left: 4px solid #dfe2e5;
+    margin: 0;
+    padding-left: 16px;
+    color: #6a737d;
+    font-size: 14px;
+}
+
+#chat-response table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 8px 0;
+    font-size: 14px;
+}
+
+#chat-response th,
+#chat-response td {
+    border: 1px solid #dfe2e5;
+    padding: 6px 13px;
+    font-size: 14px;
+}
+
+#chat-response th {
+    background-color: #f6f8fa;
+}
+
+#chat-response ul,
+#chat-response ol {
+    padding-left: 20px;
+    font-size: 14px;
+}
+
+#chat-response img {
+    max-width: 100%;
+    height: auto;
+}

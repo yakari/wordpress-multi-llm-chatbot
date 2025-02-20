@@ -1,0 +1,27 @@
+.disabled-field {
+    background-color: #f0f0f1 !important;
+    color: #8c8f94 !important;
+    cursor: not-allowed;
+}
+
+.assistant-mode {
+    background-color: #f6f7f7;
+}
+
+.spinner {
+    float: none;
+    margin: 0 0 0 5px;
+    vertical-align: middle;
+}
+
+.description {
+    margin-top: 5px !important;
+    font-style: italic;
+}
+
+.disabled-display {
+    background-color: #f0f0f1 !important;
+    color: #8c8f94 !important;
+    cursor: not-allowed;
+    width: 100%;
+} 
