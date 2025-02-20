@@ -436,9 +436,20 @@ class MultiLLMChatbot {
         error_log('Request headers: ' . print_r(getallheaders(), true));
         error_log('Server software: ' . $_SERVER['SERVER_SOFTWARE']);
         
+        // Close any active session to prevent blocking
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+        
+        // Set PHP settings for streaming
+        set_time_limit(0);
+        ignore_user_abort(false);
+        
         // Set headers for SSE (Server-Sent Events)
         header('Content-Type: text/event-stream');
-        header('Cache-Control: no-cache');
+        header('Cache-Control: no-store, no-cache, must-revalidate');
+        header('Pragma: no-cache');
+        header('X-Accel-Buffering: no'); // Disable nginx buffering
         header('Connection: keep-alive');
         
         // Add CORS headers - use the actual domain instead of wildcard
@@ -449,22 +460,29 @@ class MultiLLMChatbot {
         header('Access-Control-Allow-Headers: Content-Type');
         header('Access-Control-Allow-Credentials: true');
         
-        // Prevent FastCGI from buffering
-        if (function_exists('apache_setenv')) {
-            apache_setenv('no-gzip', 1);
+        // Prevent FastCGI and PHP buffering
+        if (function_exists('fastcgi_finish_request')) {
+            ob_end_clean();
+        } else {
+            ob_end_flush();
         }
-        // Prevent output buffering
-        while (ob_get_level()) {
+        while (ob_get_level() > 0) {
             ob_end_clean();
         }
         @ini_set('output_buffering', 'off');
         @ini_set('zlib.output_compression', false);
         @ini_set('implicit_flush', true);
+        if (function_exists('apache_setenv')) {
+            apache_setenv('no-gzip', 1);
+        }
         flush();
 
         try {
             // Send initial response to test connection
             echo "data: " . json_encode(['content' => 'Connexion établie...']) . "\n\n";
+            if (function_exists('fastcgi_finish_request')) {
+                ob_flush();
+            }
             flush();
             
             // Small delay to ensure the connection message is received
@@ -517,10 +535,17 @@ class MultiLLMChatbot {
                 error_log("Using standard chat API for $provider");
                 $this->handle_chat_api_request($provider, $api_key, $message, $definition);
             }
+
+            if (function_exists('fastcgi_finish_request')) {
+                fastcgi_finish_request();
+            }
         } catch (Exception $e) {
             error_log('Error in chat request handler: ' . $e->getMessage());
             error_log('Stack trace: ' . $e->getTraceAsString());
             echo "data: " . json_encode(['error' => 'Erreur serveur interne']) . "\n\n";
+            if (function_exists('fastcgi_finish_request')) {
+                fastcgi_finish_request();
+            }
         }
     }
 

@@ -170,14 +170,16 @@ document.addEventListener("DOMContentLoaded", function () {
                 ? `&context=${encodeURIComponent(window.chatbotPageContext)}` 
                 : '';
             
-            const url = `${chatbot_ajax.ajaxurl}?action=chatbot_request&message=${encodeURIComponent(message)}${contextParam}`;
+            const url = `${chatbot_ajax.ajaxurl}?action=chatbot_request&message=${encodeURIComponent(message)}${contextParam}&_=${Date.now()}`;
             console.log('Creating EventSource with URL:', url);
             
             currentEventSource = new EventSource(url);
+            currentEventSource.withCredentials = true; // Enable credentials
 
             currentEventSource.onopen = function() {
                 console.log('EventSource connection established');
                 console.log('ReadyState:', currentEventSource.readyState);
+                hasReceivedResponse = false; // Reset on new connection
             };
 
             currentEventSource.onmessage = function(event) {
@@ -218,10 +220,9 @@ document.addEventListener("DOMContentLoaded", function () {
             };
 
             currentEventSource.onerror = function(error) {
-                clearInterval(loadingInterval);
                 console.error('EventSource error:', error);
                 console.error('ReadyState:', currentEventSource.readyState);
-                console.error('Status:', currentEventSource.status);
+                console.error('URL:', currentEventSource.url);
                 
                 // Close current connection
                 currentEventSource.close();
@@ -229,8 +230,9 @@ document.addEventListener("DOMContentLoaded", function () {
                 if (!hasReceivedResponse && !fullResponse) {
                     if (retryCount < maxRetries) {
                         retryCount++;
-                        console.log(`Retrying connection (attempt ${retryCount} of ${maxRetries})...`);
-                        setTimeout(createEventSource, 1000 * retryCount);
+                        const delay = Math.min(1000 * Math.pow(2, retryCount), 10000); // Exponential backoff with 10s max
+                        console.log(`Retrying connection in ${delay}ms (attempt ${retryCount} of ${maxRetries})...`);
+                        setTimeout(createEventSource, delay);
                     } else {
                         console.error('Max retries reached');
                         typingSpan.textContent = 'Erreur : Impossible de contacter le serveur après plusieurs tentatives. Veuillez réessayer.';
