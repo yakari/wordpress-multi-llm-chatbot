@@ -186,21 +186,6 @@ document.addEventListener("DOMContentLoaded", function () {
             
             const url = `${chatbot_ajax.ajaxurl}?action=chatbot_request&message=${encodeURIComponent(message)}${contextParam}${nonceParam}&_=${Date.now()}`;
             
-            // Log the full request details
-            console.log('Sending chat request:', {
-                config: window.chatbotConfig,
-                request: {
-                    url,
-                    message,
-                    useContext,
-                    hasContextParam: Boolean(contextParam),
-                    provider: window.chatbotConfig.provider,
-                    isAssistantMode: window.chatbotConfig.useAssistant,
-                    assistantId: window.chatbotConfig.assistantId,
-                    hasDefinition: window.chatbotConfig.hasDefinition
-                }
-            });
-            
             try {
                 const response = await fetch(url, {
                     credentials: 'same-origin',
@@ -208,13 +193,6 @@ document.addEventListener("DOMContentLoaded", function () {
                         'Accept': 'text/event-stream',
                         'Cache-Control': 'no-cache',
                     }
-                });
-
-                // Log response headers
-                console.log('Response headers:', {
-                    status: response.status,
-                    statusText: response.statusText,
-                    headers: Object.fromEntries(response.headers.entries())
                 });
 
                 if (!response.ok) {
@@ -238,14 +216,8 @@ document.addEventListener("DOMContentLoaded", function () {
                     for (const line of lines) {
                         if (line.startsWith('data: ')) {
                             const data = JSON.parse(line.slice(6));
-                            console.log('Server response chunk:', {
-                                data,
-                                provider: window.chatbotConfig.provider,
-                                usingAssistant: window.chatbotConfig.useAssistant,
-                                timestamp: new Date().toISOString()
-                            });
                             if (data.error) {
-                                console.error('Server returned error:', data.error);
+                                console.error('Server error:', data.error);
                                 typingSpan.textContent = `Erreur : ${data.error}`;
                                 clearInterval(loadingInterval);
                                 saveChatHistory();
@@ -270,17 +242,7 @@ document.addEventListener("DOMContentLoaded", function () {
                     }
                 }
             } catch (error) {
-                console.error('Request failed:', {
-                    error,
-                    config: window.chatbotConfig,
-                    request: {
-                        url,
-                        provider: window.chatbotConfig.provider,
-                        isAssistantMode: window.chatbotConfig.useAssistant
-                    },
-                    retryCount,
-                    maxRetries
-                });
+                console.error('Request failed:', error);
                 retryCount++;
                 const delay = Math.min(1000 * Math.pow(2, retryCount), 10000);
                 console.log(`Retrying in ${delay}ms (attempt ${retryCount} of ${maxRetries})...`);

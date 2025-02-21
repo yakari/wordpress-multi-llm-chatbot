@@ -2,6 +2,12 @@
 
 All notable changes to the Multi-LLM Chatbot plugin will be documented in this file.
 
+## [1.27.0] - 2025-02-20
+### Fixed
+- Mistral agent integration now properly uses the agents API endpoint
+- Removed unnecessary system message handling for Mistral agents
+- Cleaned up logging and error handling
+
 ## [1.26.0] - 2025-02-20
 ### Added
 - Better CORS handling for production environments

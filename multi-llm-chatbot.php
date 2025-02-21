@@ -3,7 +3,7 @@
  * Plugin Name: Multi-LLM Chatbot
  * Plugin URI: https://github.com/yakari/wordpress-multi-llm-chatbot
  * Description: Plugin WordPress pour intégrer un chatbot compatible avec OpenAI, Claude, Perplexity, Google Gemini et Mistral.
- * Version: 1.26.0
+ * Version: 1.27.0
  * Author: Yann Poirier <yakari@yakablog.info>
  * Author URI: https://foliesenbaie.fr
  * License: Apache-2.0
@@ -682,10 +682,7 @@ class MultiLLMChatbot {
      * @param string $message      User message to process
      */
     private function handle_assistant_request($provider, $api_key, $assistant_id, $message) {
-        error_log("Processing assistant request for $provider");
-        error_log("Request details:");
-        error_log("- Assistant/Agent ID: $assistant_id");
-        error_log("- Message length: " . strlen($message));
+        error_log("Processing $provider assistant/agent request");
         
         if ($provider === 'openai') {
             $headers = [
@@ -738,19 +735,11 @@ class MultiLLMChatbot {
                 'Content-Type: application/json'
             ];
             
-            // Use the correct Mistral agents endpoint
             $base_url = 'https://api.mistral.ai/v1/agents/completions';
             
             // Add context to message if available
             $page_context = sanitize_text_field($_GET['context'] ?? '');
             $messages = [];
-            
-            // Log the full request configuration
-            error_log('Mistral Agent API request configuration:');
-            error_log('- Base URL: ' . $base_url);
-            error_log('- Agent ID: ' . $assistant_id);
-            error_log('- Has Context: ' . (!empty($page_context) ? 'yes' : 'no'));
-            error_log('- Context length: ' . strlen($page_context));
             
             // Add user message with context if available
             if (!empty($page_context)) {
@@ -763,19 +752,10 @@ class MultiLLMChatbot {
             }
             
             $body = json_encode([
-                'agent_id' => $assistant_id,  // Use agent_id parameter as per Mistral API
+                'agent_id' => $assistant_id,
                 'messages' => $messages,
                 'stream' => true
             ]);
-            
-            // Log the actual API request
-            error_log('Mistral Agent API request payload:');
-            error_log(json_encode([
-                'url' => $base_url,
-                'agent_id' => $assistant_id,
-                'messages_count' => count($messages),
-                'user_message_length' => strlen($message)
-            ], JSON_PRETTY_PRINT));
             
             $this->handle_standard_request($provider, $base_url, $headers, $body);
         }
