@@ -389,9 +389,11 @@ class MultiLLMChatbot {
         }
         
         ?>
+        <script src="https://cdn.jsdelivr.net/npm/marked@12.0.0/marked.min.js"></script>
         <script type="text/javascript">
             var chatbotPageContext = <?php echo json_encode($page_content); ?>;
         </script>
+        <div id="chatbot-toggle">💬</div>
         <div id="chatbot-container" class="minimized">
             <div class="chatbot-header">
                 <span>Assistant IA</span>
