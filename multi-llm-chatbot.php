@@ -376,62 +376,29 @@ class MultiLLMChatbot {
     public function render_chatbot() {
         // Check visibility settings
         if (get_option('chatbot_visibility') && !current_user_can('manage_options')) {
-            error_log('Chatbot hidden: user does not have admin privileges');
             return;
         }
 
-        // Get enhanced page context only if context is enabled globally
+        // Get page context only if enabled in settings and on a singular page
         $page_content = '';
         $context_enabled = get_option('chatbot_use_context', '0') === '1';
         $is_singular = is_singular();
         
-        error_log('Context setting value: ' . get_option('chatbot_use_context', '0'));
-        error_log('Context enabled in settings: ' . ($context_enabled ? 'yes' : 'no'));
-        error_log('Is singular page: ' . ($is_singular ? 'yes' : 'no'));
-
         if ($context_enabled && $is_singular) {
             $page_content = $this->get_page_context();
-            error_log('Context enabled globally, context length: ' . strlen($page_content));
-        } else {
-            error_log('Context disabled or not a singular page');
         }
-
-        error_log('Rendering chatbot interface' . (empty($page_content) ? ' without context' : ' with context available'));
+        
         ?>
-        <script src="https://cdn.jsdelivr.net/npm/marked@12.0.0/marked.min.js"></script>
         <script type="text/javascript">
             var chatbotPageContext = <?php echo json_encode($page_content); ?>;
-            var chatbotContextEnabled = <?php echo json_encode($context_enabled); ?>;
-            var chatbotIsSingular = <?php echo json_encode($is_singular); ?>;
-            var chatbotConfig = {
-                provider: <?php echo json_encode(get_option('chatbot_provider', 'openai')); ?>,
-                useAssistant: <?php echo json_encode(get_option("chatbot_" . get_option('chatbot_provider', 'openai') . "_use_assistant")); ?>,
-                assistantId: <?php echo json_encode(get_option("chatbot_" . get_option('chatbot_provider', 'openai') . "_assistant_id")); ?>,
-                hasDefinition: <?php echo json_encode(!empty(get_option("chatbot_" . get_option('chatbot_provider', 'openai') . "_definition"))); ?>,
-                definitionLength: <?php echo strlen(get_option("chatbot_" . get_option('chatbot_provider', 'openai') . "_definition")); ?>
-            };
-            
-            console.log('Chatbot configuration:', chatbotConfig);
         </script>
-        <div id="chatbot-toggle">💬</div>
         <div id="chatbot-container" class="minimized">
             <div class="chatbot-header">
+                <span>Assistant IA</span>
                 <div class="chatbot-controls">
-                    <?php if ($context_enabled): ?>
-                        <label class="context-toggle<?php echo !$is_singular ? ' disabled' : ''; ?>" 
-                               title="<?php echo !$is_singular ? 'Le contexte n\'est disponible que sur les articles et les pages' : 'Utiliser le contexte de la page'; ?>">
-                            <input type="checkbox" 
-                                   id="toggle-context" 
-                                   <?php echo !$is_singular ? 'disabled' : ''; ?>>
-                            <span>Utiliser le contexte de la page</span>
-                            <?php if (!$is_singular): ?>
-                                <span class="context-notice">(Non disponible)</span>
-                            <?php endif; ?>
-                        </label>
-                    <?php endif; ?>
-                    <button id="clear-chat" class="icon-button" title="Nouvelle conversation">🗑️</button>
+                    <button id="clear-chat" title="Effacer l'historique">🗑️</button>
+                    <button id="chatbot-minimize" title="Minimiser">−</button>
                 </div>
-                <button id="chatbot-minimize">−</button>
             </div>
             <div id="chat-response"></div>
             <input type="text" id="chat-input" placeholder="Posez votre question...">
@@ -745,7 +712,7 @@ class MultiLLMChatbot {
             if (!empty($page_context)) {
                 $messages[] = [
                     'role' => 'user',
-                    'content' => "Context:\n$page_context\n\nUser Question: $message"
+                    'content' => "Here's some context about the current page that might be relevant to my question. Use it only if it helps answer my question:\n\n$page_context\n\nMy question is: $message"
                 ];
             } else {
                 $messages[] = ['role' => 'user', 'content' => $message];

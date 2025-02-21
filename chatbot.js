@@ -5,8 +5,6 @@ document.addEventListener("DOMContentLoaded", function () {
     const chatInput = document.getElementById("chat-input");
     const chatResponse = document.getElementById("chat-response");
     const minimizeButton = document.getElementById("chatbot-minimize");
-    const toggleContextButton = document.getElementById("toggle-context");
-    let useContext = false;
 
     // Configure marked options
     marked.setOptions({
@@ -96,37 +94,6 @@ document.addEventListener("DOMContentLoaded", function () {
         }
     });
 
-    // Initialize context toggle only if context is enabled globally
-    if (window.chatbotContextEnabled) {
-        const toggleContextCheckbox = document.getElementById("toggle-context");
-        if (toggleContextCheckbox) {
-            console.log('Context configuration:', {
-                enabled: window.chatbotContextEnabled,
-                isSingular: window.chatbotIsSingular,
-                hasContext: Boolean(window.chatbotPageContext),
-                contextLength: window.chatbotPageContext?.length || 0
-            });
-            
-            if (window.chatbotIsSingular && window.chatbotPageContext) {
-                toggleContextCheckbox.addEventListener("change", function() {
-                    useContext = this.checked;
-                    console.log('Context toggle changed:', {
-                        useContext,
-                        contextAvailable: Boolean(window.chatbotPageContext)
-                    });
-                });
-            } else {
-                console.log('Context disabled - not a singular page or no context available');
-            }
-        }
-    } else {
-        // Remove context toggle if it exists
-        const contextToggle = document.querySelector('.context-toggle');
-        if (contextToggle) {
-            contextToggle.remove();
-        }
-    }
-
     // Update sendMessage function to save history after each message
     function sendMessage() {
         const message = chatInput.value.trim();
@@ -176,7 +143,7 @@ document.addEventListener("DOMContentLoaded", function () {
                 return;
             }
 
-            const contextParam = (useContext && window.chatbotPageContext) 
+            const contextParam = window.chatbotPageContext 
                 ? `&context=${encodeURIComponent(window.chatbotPageContext)}` 
                 : '';
             
