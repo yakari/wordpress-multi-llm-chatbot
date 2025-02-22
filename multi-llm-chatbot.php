@@ -3,7 +3,7 @@
  * Plugin Name: Multi-LLM Chatbot
  * Plugin URI: https://github.com/yakari/wordpress-multi-llm-chatbot
  * Description: Plugin WordPress pour intégrer un chatbot compatible avec OpenAI, Claude, Perplexity, Google Gemini et Mistral.
- * Version: 1.27.0
+ * Version: 1.28.0
  * Author: Yann Poirier <yakari@yakablog.info>
  * Author URI: https://foliesenbaie.fr
  * License: Apache-2.0
@@ -445,54 +445,10 @@ class MultiLLMChatbot {
      * Main entry point for all chat interactions
      */
     public function handle_chat_request() {
-        // Add provider info logging
-        $provider = get_option('chatbot_provider', 'openai');
-        $use_assistant = get_option("chatbot_{$provider}_use_assistant");
-        $assistant_id = get_option("chatbot_{$provider}_assistant_id");
-        $definition = get_option("chatbot_{$provider}_definition", '');
-        
-        error_log('Chat request configuration:');
-        error_log("- Provider: $provider");
-        error_log("- Use Assistant/Agent: " . ($use_assistant ? 'yes' : 'no'));
-        error_log("- Assistant/Agent ID: " . ($assistant_id ?: 'none'));
-        error_log("- Has Definition: " . (!empty($definition) ? 'yes' : 'no'));
-        error_log("- Definition length: " . strlen($definition));
-        
-        if ($provider === 'mistral') {
-            error_log('Mistral specific configuration:');
-            error_log('- Agent mode enabled: ' . ($use_assistant ? 'yes' : 'no'));
-            error_log('- Agent ID set: ' . (!empty($assistant_id) ? 'yes' : 'no'));
-            error_log('- Definition preview: ' . substr($definition, 0, 100) . '...');
-        }
-        
-        // Allow same-origin requests
-        header('Access-Control-Allow-Origin: ' . get_site_url());
-        header('Access-Control-Allow-Credentials: true');
-        header('Content-Type: text/event-stream');
-        header('Cache-Control: no-store, no-cache, must-revalidate');
-        header('Pragma: no-cache');
-        
-        // Check nonce for authenticated users
-        if (is_user_logged_in()) {
-            check_ajax_referer('wp_rest', '_wpnonce');
-        }
-        
-        // Prevent output buffering
-        while (ob_get_level()) {
-            ob_end_clean();
-        }
-        @ini_set('output_buffering', 'off');
-        @ini_set('zlib.output_compression', false);
-        flush();
-        
         try {
-            // Send initial response
-            echo "data: " . json_encode(['content' => 'Connexion établie...']) . "\n\n";
-            flush();
-            
-            // Rest of the handler...
+            // Get message and check API key
             $message = sanitize_text_field($_GET['message'] ?? '');
-            $page_context = sanitize_text_field($_GET['context'] ?? '');
+            $history = json_decode(sanitize_text_field($_GET['history'] ?? '[]'), true);
             
             if (empty($message)) {
                 error_log('Error: Empty message received');
@@ -500,265 +456,200 @@ class MultiLLMChatbot {
                 return;
             }
 
-            // Get provider configuration
+            // Get provider and API configuration
+            $provider = get_option('chatbot_provider', 'openai');
+            $use_assistant = get_option("chatbot_{$provider}_use_assistant", false);
+            $assistant_id = get_option("chatbot_{$provider}_assistant_id");
+            $definition = get_option("chatbot_{$provider}_definition");
+            
             $api_key = get_option("chatbot_{$provider}_api_key");
-
-            // Add page context to system instructions if available
-            if (!empty($page_context)) {
-                error_log('Adding page context to request. Context length: ' . strlen($page_context));
-                error_log('Context preview: ' . substr($page_context, 0, 200) . '...');
-                $context_prompt = "Current page content:\n\n$page_context\n\nPlease use this content as context when relevant to answer the user's questions.";
-                $definition = $definition ? $definition . "\n\n" . $context_prompt : $context_prompt;
-                error_log('Final system message length: ' . strlen($definition));
-            } else {
-                error_log('No page context provided in request');
-            }
-
-            error_log("Provider: $provider");
-            error_log("Assistant enabled: " . ($use_assistant ? 'yes' : 'no'));
-            error_log("Assistant ID present: " . (!empty($assistant_id) ? 'yes' : 'no'));
-
             if (empty($api_key)) {
                 error_log('Error: No API key configured');
                 echo "data: " . json_encode(['error' => 'API key required']) . "\n\n";
                 return;
             }
 
-            // Route to appropriate handler based on configuration
-            if (($provider === 'openai' || $provider === 'mistral') && 
-                $use_assistant && !empty($assistant_id)) {
-                error_log("Using assistant/agent API for $provider");
-                $this->handle_assistant_request($provider, $api_key, $assistant_id, $message);
+            // Add current message with URL context if available
+            $current_url = get_permalink();
+            $context_message = $current_url && is_singular()
+                ? "I'm on this page: $current_url. If you can browse it, please use its content to help answer my question. If you can't access it, just answer my question directly. Here's my question: $message"
+                : $message;
+
+            // Route to appropriate handler
+            if ($provider === 'openai' && $use_assistant && !empty($assistant_id)) {
+                error_log("Using OpenAI Assistant API");
+                $this->handle_openai_assistant($api_key, $assistant_id, $context_message);
+            } else if ($provider === 'mistral' && $use_assistant && !empty($assistant_id)) {
+                error_log("Using Mistral Agent API");
+                $this->handle_mistral_agent($api_key, $assistant_id, $context_message, $history);
             } else {
-                error_log("Using standard chat API for $provider (Assistant mode: " . 
-                         ($use_assistant ? 'yes' : 'no') . 
-                         ", Assistant ID: " . ($assistant_id ?: 'none') . ")");
-                $this->handle_chat_api_request($provider, $api_key, $message, $definition);
+                error_log("Using standard chat API for $provider");
+                $this->handle_chat_api_request($provider, $api_key, $context_message, $definition, $history);
             }
         } catch (Exception $e) {
             error_log('Error: ' . $e->getMessage());
-            echo "data: " . json_encode(['error' => 'Erreur serveur']) . "\n\n";
+            echo "data: " . json_encode(['error' => 'Server error']) . "\n\n";
         }
     }
 
-    /**
-     * Handles standard chat API requests for all providers
-     * Processes requests to the standard chat completion endpoints
-     * 
-     * @param string $provider Provider identifier
-     * @param string $api_key  API key for authentication
-     * @param string $message  User message to process
-     * @param string $definition System instructions/definition
-     */
-    private function handle_chat_api_request($provider, $api_key, $message, $definition) {
-        error_log("Processing chat API request for provider: $provider");
+    private function handle_chat_api_request($provider, $api_key, $message, $definition, $history) {
+        $headers = [
+            'Authorization: Bearer ' . $api_key,
+            'Content-Type: application/json'
+        ];
+
+        // Build messages array
+        $messages = [];
         
-        $headers = ['Authorization: Bearer ' . $api_key];
-        $base_url = '';
-        $body = [];
+        // Add system message if definition exists
+        if (!empty($definition)) {
+            $messages[] = ['role' => 'system', 'content' => $definition];
+        }
+        
+        // Add conversation history
+        foreach ($history as $entry) {
+            $messages[] = [
+                'role' => $entry['role'],
+                'content' => $entry['content']
+            ];
+        }
+        
+        // Add current message
+        $messages[] = ['role' => 'user', 'content' => $message];
 
         switch ($provider) {
             case 'openai':
-                $base_url = 'https://api.openai.com/v1/';
-                $headers[] = 'Content-Type: application/json';
-                $body = [
+                $url = 'https://api.openai.com/v1/chat/completions';
+                $body = json_encode([
                     'model' => 'gpt-4-turbo-preview',
-                    'messages' => [
-                        ['role' => 'system', 'content' => $definition],
-                        // Add context as a separate user message if available
-                        ...($page_context ? [['role' => 'user', 'content' => "Here is the current page content for context:\n\n$page_context"]] : []),
-                        ['role' => 'user', 'content' => $message]
-                    ],
+                    'messages' => $messages,
                     'stream' => true
-                ];
-                error_log('OpenAI request payload: ' . print_r([
-                    'url' => $base_url . 'chat/completions',
-                    'system_content_length' => strlen($definition),
-                    'system_content' => substr($definition, 0, 500) . (strlen($definition) > 500 ? '...' : ''),
-                    'context_length' => strlen($page_context ?? ''),
-                    'user_message' => $message
-                ], true));
+                ]);
                 break;
-
+                
             case 'mistral':
-                $base_url = 'https://api.mistral.ai/v1/chat/completions';
-                $headers[] = 'Content-Type: application/json';
-                $body = [
+                $url = 'https://api.mistral.ai/v1/chat/completions';
+                $body = json_encode([
                     'model' => 'mistral-large-latest',
-                    'messages' => [
-                        ['role' => 'system', 'content' => $definition],
-                        ['role' => 'user', 'content' => $message]
-                    ],
+                    'messages' => $messages,
                     'stream' => true
-                ];
-                error_log('Mistral request payload: ' . print_r([
-                    'url' => $base_url,
-                    'system_content_length' => strlen($definition),
-                    'system_content' => substr($definition, 0, 500) . (strlen($definition) > 500 ? '...' : ''),
-                    'user_message' => $message
-                ], true));
+                ]);
                 break;
-
-            case 'claude':
+                
+            case 'anthropic':
                 $url = 'https://api.anthropic.com/v1/messages';
-                $headers = [
-                    'Content-Type: application/json',
-                    'x-api-key: ' . $api_key,
-                    'anthropic-version: 2023-06-01'
-                ];
                 $body = json_encode([
                     'model' => 'claude-3-opus-20240229',
-                    'max_tokens' => 4096,
-                    'messages' => [
-                        ['role' => 'user', 'content' => $message]
-                    ],
+                    'messages' => $messages,
                     'stream' => true
                 ]);
-                $this->handle_standard_request($provider, $url, $headers, $body);
                 break;
-
+                
             case 'perplexity':
                 $url = 'https://api.perplexity.ai/chat/completions';
-                $headers = [
-                    'Content-Type: application/json',
-                    'Authorization: Bearer ' . $api_key
-                ];
                 $body = json_encode([
-                    'model' => 'mixtral-8x7b-instruct',
-                    'messages' => [
-                        ['role' => 'system', 'content' => $definition],
-                        ['role' => 'user', 'content' => $message]
-                    ],
+                    'model' => 'sonar-medium-online',
+                    'messages' => $messages,
                     'stream' => true
                 ]);
-                $this->handle_standard_request($provider, $url, $headers, $body);
                 break;
-
+                
             case 'gemini':
-                $url = 'https://generativelanguage.googleapis.com/v1/models/gemini-pro:streamGenerateContent';
-                $headers = [
-                    'Content-Type: application/json',
-                    'x-goog-api-key: ' . $api_key
-                ];
+                $url = 'https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro-latest:generateContent';
                 $body = json_encode([
-                    'contents' => [
-                        'role' => 'user',
-                        'parts' => [
-                            ['text' => $definition . "\n\n" . $message]
-                        ]
-                    ],
-                    'generation_config' => [
-                        'temperature' => 0.7,
-                        'top_k' => 40,
-                        'top_p' => 0.95,
-                        'candidate_count' => 1
-                    ]
+                    'contents' => $messages,
+                    'stream' => true
                 ]);
-                $this->handle_standard_request($provider, $url, $headers, $body);
                 break;
-
-            default:
-                error_log("Unsupported provider: $provider");
-                echo "data: " . json_encode(['error' => 'Provider not supported']) . "\n\n";
-                return;
         }
 
-        error_log("Making API request to: " . ($provider === 'openai' ? $base_url . 'chat/completions' : $base_url));
-        
-        if ($provider === 'openai') {
-            $this->handle_standard_request($provider, $base_url . 'chat/completions', $headers, json_encode($body));
-        } else {
-            $this->handle_standard_request($provider, $base_url, $headers, json_encode($body));
-        }
+        $this->handle_streaming_request($url, $headers, $body);
     }
 
-    /**
-     * Handles requests to assistant/agent APIs
-     * Manages the specialized assistant APIs for OpenAI and Mistral
-     * 
-     * @param string $provider     Provider identifier
-     * @param string $api_key      API key for authentication
-     * @param string $assistant_id Assistant/Agent identifier
-     * @param string $message      User message to process
-     */
-    private function handle_assistant_request($provider, $api_key, $assistant_id, $message) {
-        error_log("Processing $provider assistant/agent request");
-        
-        if ($provider === 'openai') {
-            $headers = [
-                'Authorization: Bearer ' . $api_key,
-                'Content-Type: application/json',
-                'OpenAI-Beta: assistants=v2'
-            ];
-            
-            $base_url = 'https://api.openai.com/v1/';
-            
-            error_log('OpenAI API request configuration:');
-            error_log('- Base URL: ' . $base_url);
-            error_log('- Assistant ID: ' . $assistant_id);
-            
-            // Create thread
-            $thread_id = $this->create_openai_thread($base_url, $headers);
-            if (!$thread_id) {
-                echo "data: " . json_encode(['error' => 'Failed to create thread']) . "\n\n";
-                return;
-            }
-            
-            // Add context to message if available
-            $page_context = sanitize_text_field($_GET['context'] ?? '');
-            $full_message = $message;
-            if (!empty($page_context)) {
-                error_log('Adding context to OpenAI message. Context length: ' . strlen($page_context));
-                $full_message = "Context:\n$page_context\n\nUser Question: $message";
-            }
+    private function handle_openai_assistant($api_key, $assistant_id, $message) {
+        $headers = [
+            'Authorization: Bearer ' . $api_key,
+            'Content-Type: application/json',
+            'OpenAI-Beta: assistants=v1'
+        ];
 
-            // Add message to thread
-            $message_result = $this->add_message_to_thread($base_url, $headers, $thread_id, $full_message);
-            if (is_wp_error($message_result)) {
-                echo "data: " . json_encode(['error' => 'Failed to add message']) . "\n\n";
-                return;
-            }
-            
-            // Start run
-            $run_id = $this->start_assistant_run($base_url, $headers, $thread_id, $assistant_id);
-            if (!$run_id) {
-                echo "data: " . json_encode(['error' => 'Failed to start run']) . "\n\n";
-                return;
-            }
-            
-            // Poll for completion
-            $this->poll_openai_completion($base_url, $headers, $thread_id, $run_id);
-            
-        } else if ($provider === 'mistral') {
-            $headers = [
-                'Authorization: Bearer ' . $api_key,
-                'Content-Type: application/json'
-            ];
-            
-            $base_url = 'https://api.mistral.ai/v1/agents/completions';
-            
-            // Add context to message if available
-            $page_context = sanitize_text_field($_GET['context'] ?? '');
-            $messages = [];
-            
-            // Add user message with context if available
-            if (!empty($page_context)) {
-                $messages[] = [
-                    'role' => 'user',
-                    'content' => "Context:\n$page_context\n\nUser Question: $message"
-                ];
-            } else {
-                $messages[] = ['role' => 'user', 'content' => $message];
-            }
-            
-            $body = json_encode([
-                'agent_id' => $assistant_id,
-                'messages' => $messages,
-                'stream' => true
+        // Create thread if none exists in session
+        if (!isset($_SESSION['openai_thread_id'])) {
+            $thread_response = wp_remote_post('https://api.openai.com/v1/threads', [
+                'headers' => $headers,
+                'body' => '{}'
             ]);
             
-            $this->handle_standard_request($provider, $base_url, $headers, $body);
+            if (is_wp_error($thread_response)) {
+                throw new Exception('Failed to create thread');
+            }
+            
+            $thread_data = json_decode(wp_remote_retrieve_body($thread_response), true);
+            $_SESSION['openai_thread_id'] = $thread_data['id'];
         }
+        
+        $thread_id = $_SESSION['openai_thread_id'];
+
+        // Add message to thread
+        $message_url = "https://api.openai.com/v1/threads/{$thread_id}/messages";
+        $message_response = wp_remote_post($message_url, [
+            'headers' => $headers,
+            'body' => json_encode([
+                'role' => 'user',
+                'content' => $message
+            ])
+        ]);
+
+        if (is_wp_error($message_response)) {
+            throw new Exception('Failed to add message to thread');
+        }
+
+        // Create run
+        $run_url = "https://api.openai.com/v1/threads/{$thread_id}/runs";
+        $run_response = wp_remote_post($run_url, [
+            'headers' => $headers,
+            'body' => json_encode([
+                'assistant_id' => $assistant_id
+            ])
+        ]);
+
+        if (is_wp_error($run_response)) {
+            throw new Exception('Failed to create run');
+        }
+
+        $run_data = json_decode(wp_remote_retrieve_body($run_response), true);
+        
+        // Poll for completion and stream messages
+        $this->poll_openai_completion($thread_id, $run_data['id'], $headers);
+    }
+
+    private function handle_mistral_agent($api_key, $agent_id, $message, $history) {
+        $headers = [
+            'Authorization: Bearer ' . $api_key,
+            'Content-Type: application/json'
+        ];
+        
+        $url = 'https://api.mistral.ai/v1/agents/completions';
+        
+        // Build messages array with history
+        $messages = [];
+        foreach ($history as $entry) {
+            $messages[] = [
+                'role' => $entry['role'],
+                'content' => $entry['content']
+            ];
+        }
+        
+        // Add current message
+        $messages[] = ['role' => 'user', 'content' => $message];
+        
+        $body = json_encode([
+            'agent_id' => $agent_id,
+            'messages' => $messages,
+            'stream' => true
+        ]);
+        
+        $this->handle_streaming_request($url, $headers, $body);
     }
 
     /**

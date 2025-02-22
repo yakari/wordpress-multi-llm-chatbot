@@ -7,6 +7,24 @@ document.addEventListener("DOMContentLoaded", function () {
     const minimizeButton = document.getElementById("chatbot-minimize");
     const toggleContextButton = document.getElementById("toggle-context");
     let useContext = false;
+    let conversationHistory = [];
+
+    // Load saved history from localStorage if available
+    try {
+        const savedHistory = localStorage.getItem('chatbotHistory');
+        if (savedHistory) {
+            conversationHistory = JSON.parse(savedHistory);
+            // Render saved history
+            conversationHistory.forEach(entry => {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `message ${entry.role}`;
+                messageDiv.innerHTML = marked.parse(entry.content);
+                chatResponse.appendChild(messageDiv);
+            });
+        }
+    } catch (e) {
+        console.error('Error loading chat history:', e);
+    }
 
     // Configure marked options
     marked.setOptions({
@@ -70,8 +88,16 @@ document.addEventListener("DOMContentLoaded", function () {
         requestAnimationFrame(update);
     }
 
-    // Load saved chat history
-    loadChatHistory();
+    // Function to add message to history
+    function addToHistory(role, content) {
+        conversationHistory.push({ role, content });
+        // Save to localStorage
+        try {
+            localStorage.setItem('chatbotHistory', JSON.stringify(conversationHistory));
+        } catch (e) {
+            console.error('Error saving chat history:', e);
+        }
+    }
 
     // Function to save chat history
     function saveChatHistory() {
@@ -93,6 +119,7 @@ document.addEventListener("DOMContentLoaded", function () {
         if (confirm("Are you sure you want to clear the chat history?")) {
             chatResponse.innerHTML = '';
             localStorage.removeItem('chatbotHistory');
+            conversationHistory = [];
         }
     });
 
@@ -132,25 +159,39 @@ document.addEventListener("DOMContentLoaded", function () {
         const message = chatInput.value.trim();
         if (!message) return;
 
-        // Escape HTML in user message
-        const escapedMessage = message.replace(/[&<>"']/g, function(char) {
-            const entities = {
-                '&': '&amp;',
-                '<': '&lt;',
-                '>': '&gt;',
-                '"': '&quot;',
-                "'": '&#39;'
-            };
-            return entities[char];
-        });
+        // Add user message to history and display
+        addToHistory('user', message);
+        
+        // Display user message
+        const userDiv = document.createElement('div');
+        userDiv.className = 'message user';
+        userDiv.innerHTML = marked.parse(message);
+        chatResponse.appendChild(userDiv);
+        
+        // Clear input
+        chatInput.value = '';
+        
+        // Create response container
+        const responseDiv = document.createElement('div');
+        responseDiv.className = 'message assistant';
+        const typingSpan = document.createElement('span');
+        responseDiv.appendChild(typingSpan);
+        chatResponse.appendChild(responseDiv);
+        
+        // Scroll to bottom
+        chatResponse.scrollTop = chatResponse.scrollHeight;
 
-        chatResponse.innerHTML += `<p><strong>Vous :</strong> ${escapedMessage}</p>`;
-        chatInput.value = "";
-
-        const responseElement = document.createElement('p');
-        responseElement.innerHTML = '<strong>Assistant :</strong> <span class="typing-response">En attente de réponse...</span>';
-        chatResponse.appendChild(responseElement);
-        const typingSpan = responseElement.querySelector('.typing-response');
+        // Prepare request URL with context if enabled
+        const contextParam = (useContext && window.chatbotPageContext) 
+            ? `&context=${encodeURIComponent(window.chatbotPageContext)}` 
+            : '';
+        
+        // Add history to request
+        const historyParam = `&history=${encodeURIComponent(JSON.stringify(conversationHistory))}`;
+        
+        const nonceParam = `&_wpnonce=${chatbot_ajax.nonce}`;
+        
+        const url = `${chatbot_ajax.ajaxurl}?action=chatbot_request&message=${encodeURIComponent(message)}${contextParam}${historyParam}${nonceParam}&_=${Date.now()}`;
 
         let fullResponse = '';
         let hasReceivedResponse = false;
@@ -176,16 +217,6 @@ document.addEventListener("DOMContentLoaded", function () {
                 return;
             }
 
-            const contextParam = (useContext && window.chatbotPageContext) 
-                ? `&context=${encodeURIComponent(window.chatbotPageContext)}` 
-                : '';
-            
-            const nonceParam = chatbot_ajax.nonce 
-                ? `&_wpnonce=${chatbot_ajax.nonce}` 
-                : '';
-            
-            const url = `${chatbot_ajax.ajaxurl}?action=chatbot_request&message=${encodeURIComponent(message)}${contextParam}${nonceParam}&_=${Date.now()}`;
-            
             try {
                 const response = await fetch(url, {
                     credentials: 'same-origin',
@@ -237,6 +268,7 @@ document.addEventListener("DOMContentLoaded", function () {
                                 typingSpan.innerHTML = marked.parse(fullResponse);
                                 saveChatHistory();
                                 chatResponse.scrollTop = chatResponse.scrollHeight;
+                                addToHistory('assistant', fullResponse);
                             }
                         }
                     }
