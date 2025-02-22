@@ -2,6 +2,99 @@
 
 All notable changes to the Multi-LLM Chatbot plugin will be documented in this file.
 
+## [1.40.0] - 2025-02-20
+### Changed
+- Translated context prompts to French
+- Better language consistency
+- Improved French user experience
+- More natural French conversation flow
+
+## [1.39.0] - 2025-02-20
+### Changed
+- Simplified Mistral agent context handling
+- Direct reference to previous answers in questions
+- Better follow-up question clarity
+- More natural conversation flow
+
+## [1.38.0] - 2025-02-20
+### Changed
+- Improved Q&A relationship handling for Mistral agents
+- More explicit context linking between questions
+- Better follow-up question handling
+- Enhanced conversation continuity
+
+## [1.37.0] - 2025-02-20
+### Changed
+- Improved conversation context for Mistral agents
+- Better immediate context handling
+- More explicit context references
+- Enhanced question-answer relationship tracking
+
+## [1.36.0] - 2025-02-20
+### Changed
+- Improved conversation history formatting for Mistral agents
+- Better dialogue structure for context awareness
+- More explicit conversation markers
+- Enhanced history readability for AI
+
+## [1.35.0] - 2025-02-20
+### Changed
+- Simplified conversation history handling
+- Native message history support for all providers
+- Removed conversation formatting for better compatibility
+- More reliable history tracking across providers
+
+## [1.34.0] - 2025-02-20
+### Changed
+- Improved conversation history handling for all providers
+- Better context management for Mistral agents
+- Enhanced history formatting for Claude and Gemini
+- More consistent conversation flow across providers
+
+## [1.33.0] - 2025-02-20
+### Added
+- Conversation history for better context awareness
+- Memory of last 5 Q&A pairs
+- History cleared with chat clear button
+
+### Changed
+- Improved context handling with conversation memory
+- Better response relevance with history context
+
+## [1.32.1] - 2025-02-20
+### Changed
+- Reverted to simpler message handling
+- Removed unreliable conversation history features
+- Better stability across all providers
+- Fixed timeout issues with Mistral API
+
+## [1.31.0] - 2025-02-20
+### Changed
+- Improved URL handling: now lets providers check URL accessibility
+- Better error handling for inaccessible URLs
+- More robust context handling across all environments
+
+## [1.30.0] - 2025-02-20
+### Added
+- Quick URL availability check before sending to providers
+- Better handling of local development environments
+
+### Fixed
+- Timeout issues when URL is not publicly accessible
+
+## [1.29.0] - 2025-02-20
+### Changed
+- Updated all providers to use web browsing capabilities when available
+- Improved context handling: now sends page URL instead of content
+- Better performance across all providers
+- Consistent context handling between assistant and non-assistant modes
+
+## [1.28.0] - 2025-02-20
+### Changed
+- Improved Mistral agent context handling: now uses agent's web browsing capability instead of sending page content
+- Removed context sending for Mistral to prevent timeouts
+- Better performance with large pages
+
 ## [1.27.0] - 2025-02-20
 ### Fixed
 - Mistral agent integration now properly uses the agents API endpoint

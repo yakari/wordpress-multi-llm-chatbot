@@ -3,7 +3,7 @@
  * Plugin Name: Multi-LLM Chatbot
  * Plugin URI: https://github.com/yakari/wordpress-multi-llm-chatbot
  * Description: Plugin WordPress pour intégrer un chatbot compatible avec OpenAI, Claude, Perplexity, Google Gemini et Mistral.
- * Version: 1.27.0
+ * Version: 1.32.1
  * Author: Yann Poirier <yakari@yakablog.info>
  * Author URI: https://foliesenbaie.fr
  * License: Apache-2.0
@@ -414,38 +414,24 @@ class MultiLLMChatbot {
      * Main entry point for all chat interactions
      */
     public function handle_chat_request() {
-        // Add provider info logging
+        // Add provider configuration
         $provider = get_option('chatbot_provider', 'openai');
         $use_assistant = get_option("chatbot_{$provider}_use_assistant");
         $assistant_id = get_option("chatbot_{$provider}_assistant_id");
         $definition = get_option("chatbot_{$provider}_definition", '');
-        
-        error_log('Chat request configuration:');
-        error_log("- Provider: $provider");
-        error_log("- Use Assistant/Agent: " . ($use_assistant ? 'yes' : 'no'));
-        error_log("- Assistant/Agent ID: " . ($assistant_id ?: 'none'));
-        error_log("- Has Definition: " . (!empty($definition) ? 'yes' : 'no'));
-        error_log("- Definition length: " . strlen($definition));
-        
-        if ($provider === 'mistral') {
-            error_log('Mistral specific configuration:');
-            error_log('- Agent mode enabled: ' . ($use_assistant ? 'yes' : 'no'));
-            error_log('- Agent ID set: ' . (!empty($assistant_id) ? 'yes' : 'no'));
-            error_log('- Definition preview: ' . substr($definition, 0, 100) . '...');
-        }
-        
+
         // Allow same-origin requests
         header('Access-Control-Allow-Origin: ' . get_site_url());
         header('Access-Control-Allow-Credentials: true');
         header('Content-Type: text/event-stream');
         header('Cache-Control: no-store, no-cache, must-revalidate');
         header('Pragma: no-cache');
-        
+
         // Check nonce for authenticated users
         if (is_user_logged_in()) {
             check_ajax_referer('wp_rest', '_wpnonce');
         }
-        
+
         // Prevent output buffering
         while (ob_get_level()) {
             ob_end_clean();
@@ -453,56 +439,54 @@ class MultiLLMChatbot {
         @ini_set('output_buffering', 'off');
         @ini_set('zlib.output_compression', false);
         flush();
-        
+
         try {
-            // Send initial response
-            echo "data: " . json_encode(['content' => 'Connexion établie...']) . "\n\n";
-            flush();
-            
-            // Rest of the handler...
+            // Get message and check API key
             $message = sanitize_text_field($_GET['message'] ?? '');
-            $page_context = sanitize_text_field($_GET['context'] ?? '');
-            
             if (empty($message)) {
                 error_log('Error: Empty message received');
                 echo "data: " . json_encode(['error' => 'Message required']) . "\n\n";
                 return;
             }
 
-            // Get provider configuration
             $api_key = get_option("chatbot_{$provider}_api_key");
-
-            // Add page context to system instructions if available
-            if (!empty($page_context)) {
-                error_log('Adding page context to request. Context length: ' . strlen($page_context));
-                error_log('Context preview: ' . substr($page_context, 0, 200) . '...');
-                $context_prompt = "Current page content:\n\n$page_context\n\nPlease use this content as context when relevant to answer the user's questions.";
-                $definition = $definition ? $definition . "\n\n" . $context_prompt : $context_prompt;
-                error_log('Final system message length: ' . strlen($definition));
-            } else {
-                error_log('No page context provided in request');
-            }
-
-            error_log("Provider: $provider");
-            error_log("Assistant enabled: " . ($use_assistant ? 'yes' : 'no'));
-            error_log("Assistant ID present: " . (!empty($assistant_id) ? 'yes' : 'no'));
-
             if (empty($api_key)) {
                 error_log('Error: No API key configured');
                 echo "data: " . json_encode(['error' => 'API key required']) . "\n\n";
                 return;
             }
 
-            // Route to appropriate handler based on configuration
+            // Build messages array with history and context
+            $messages = [];
+            if (!empty($definition)) {
+                $messages[] = ['role' => 'system', 'content' => $definition];
+            }
+            
+            // Add conversation history
+            $history = json_decode(sanitize_text_field($_GET['history'] ?? '[]'), true);
+            foreach ($history as $entry) {
+                $messages[] = [
+                    'role' => $entry['role'],
+                    'content' => $entry['content']
+                ];
+            }
+            
+            // Add current message with URL context if available
+            $current_url = get_permalink();
+            $context_message = $current_url && is_singular()
+                ? "I'm on this page: $current_url. If you can browse it, please use its content to help answer my question. If you can't access it, just answer my question directly. Here's my question: $message"
+                : $message;
+            
+            $messages[] = ['role' => 'user', 'content' => $context_message];
+
+            // Route to appropriate handler
             if (($provider === 'openai' || $provider === 'mistral') && 
                 $use_assistant && !empty($assistant_id)) {
                 error_log("Using assistant/agent API for $provider");
-                $this->handle_assistant_request($provider, $api_key, $assistant_id, $message);
+                $this->handle_assistant_request($provider, $api_key, $assistant_id, $messages);
             } else {
-                error_log("Using standard chat API for $provider (Assistant mode: " . 
-                         ($use_assistant ? 'yes' : 'no') . 
-                         ", Assistant ID: " . ($assistant_id ?: 'none') . ")");
-                $this->handle_chat_api_request($provider, $api_key, $message, $definition);
+                error_log("Using standard chat API for $provider");
+                $this->handle_chat_api_request($provider, $api_key, $messages);
             }
         } catch (Exception $e) {
             error_log('Error: ' . $e->getMessage());
@@ -516,10 +500,9 @@ class MultiLLMChatbot {
      * 
      * @param string $provider Provider identifier
      * @param string $api_key  API key for authentication
-     * @param string $message  User message to process
-     * @param string $definition System instructions/definition
+     * @param string $messages User messages to process
      */
-    private function handle_chat_api_request($provider, $api_key, $message, $definition) {
+    private function handle_chat_api_request($provider, $api_key, $messages) {
         error_log("Processing chat API request for provider: $provider");
         
         $headers = ['Authorization: Bearer ' . $api_key];
@@ -532,21 +515,9 @@ class MultiLLMChatbot {
                 $headers[] = 'Content-Type: application/json';
                 $body = [
                     'model' => 'gpt-4-turbo-preview',
-                    'messages' => [
-                        ['role' => 'system', 'content' => $definition],
-                        // Add context as a separate user message if available
-                        ...($page_context ? [['role' => 'user', 'content' => "Here is the current page content for context:\n\n$page_context"]] : []),
-                        ['role' => 'user', 'content' => $message]
-                    ],
+                    'messages' => $messages,
                     'stream' => true
                 ];
-                error_log('OpenAI request payload: ' . print_r([
-                    'url' => $base_url . 'chat/completions',
-                    'system_content_length' => strlen($definition),
-                    'system_content' => substr($definition, 0, 500) . (strlen($definition) > 500 ? '...' : ''),
-                    'context_length' => strlen($page_context ?? ''),
-                    'user_message' => $message
-                ], true));
                 break;
 
             case 'mistral':
@@ -554,66 +525,50 @@ class MultiLLMChatbot {
                 $headers[] = 'Content-Type: application/json';
                 $body = [
                     'model' => 'mistral-large-latest',
-                    'messages' => [
-                        ['role' => 'system', 'content' => $definition],
-                        ['role' => 'user', 'content' => $message]
-                    ],
+                    'messages' => $messages,
                     'stream' => true
                 ];
-                error_log('Mistral request payload: ' . print_r([
-                    'url' => $base_url,
-                    'system_content_length' => strlen($definition),
-                    'system_content' => substr($definition, 0, 500) . (strlen($definition) > 500 ? '...' : ''),
-                    'user_message' => $message
-                ], true));
                 break;
 
             case 'claude':
-                $url = 'https://api.anthropic.com/v1/messages';
+                $base_url = 'https://api.anthropic.com/v1/messages';
                 $headers = [
                     'Content-Type: application/json',
                     'x-api-key: ' . $api_key,
                     'anthropic-version: 2023-06-01'
                 ];
-                $body = json_encode([
+                $body = [
                     'model' => 'claude-3-opus-20240229',
                     'max_tokens' => 4096,
-                    'messages' => [
-                        ['role' => 'user', 'content' => $message]
-                    ],
+                    'messages' => $messages,
                     'stream' => true
-                ]);
-                $this->handle_standard_request($provider, $url, $headers, $body);
+                ];
                 break;
 
             case 'perplexity':
-                $url = 'https://api.perplexity.ai/chat/completions';
+                $base_url = 'https://api.perplexity.ai/chat/completions';
                 $headers = [
                     'Content-Type: application/json',
                     'Authorization: Bearer ' . $api_key
                 ];
-                $body = json_encode([
+                $body = [
                     'model' => 'mixtral-8x7b-instruct',
-                    'messages' => [
-                        ['role' => 'system', 'content' => $definition],
-                        ['role' => 'user', 'content' => $message]
-                    ],
+                    'messages' => $messages,
                     'stream' => true
-                ]);
-                $this->handle_standard_request($provider, $url, $headers, $body);
+                ];
                 break;
 
             case 'gemini':
-                $url = 'https://generativelanguage.googleapis.com/v1/models/gemini-pro:streamGenerateContent';
+                $base_url = 'https://generativelanguage.googleapis.com/v1/models/gemini-pro:streamGenerateContent';
                 $headers = [
                     'Content-Type: application/json',
                     'x-goog-api-key: ' . $api_key
                 ];
-                $body = json_encode([
+                $body = [
                     'contents' => [
                         'role' => 'user',
                         'parts' => [
-                            ['text' => $definition . "\n\n" . $message]
+                            ['text' => $messages[count($messages) - 1]['content']]
                         ]
                     ],
                     'generation_config' => [
@@ -622,18 +577,11 @@ class MultiLLMChatbot {
                         'top_p' => 0.95,
                         'candidate_count' => 1
                     ]
-                ]);
-                $this->handle_standard_request($provider, $url, $headers, $body);
+                ];
                 break;
-
-            default:
-                error_log("Unsupported provider: $provider");
-                echo "data: " . json_encode(['error' => 'Provider not supported']) . "\n\n";
-                return;
         }
 
-        error_log("Making API request to: " . ($provider === 'openai' ? $base_url . 'chat/completions' : $base_url));
-        
+        // Make the request
         if ($provider === 'openai') {
             $this->handle_standard_request($provider, $base_url . 'chat/completions', $headers, json_encode($body));
         } else {
@@ -648,9 +596,9 @@ class MultiLLMChatbot {
      * @param string $provider     Provider identifier
      * @param string $api_key      API key for authentication
      * @param string $assistant_id Assistant/Agent identifier
-     * @param string $message      User message to process
+     * @param string $messages     User messages to process
      */
-    private function handle_assistant_request($provider, $api_key, $assistant_id, $message) {
+    private function handle_assistant_request($provider, $api_key, $assistant_id, $messages) {
         error_log("Processing $provider assistant/agent request");
         
         if ($provider === 'openai') {
@@ -662,10 +610,6 @@ class MultiLLMChatbot {
             
             $base_url = 'https://api.openai.com/v1/';
             
-            error_log('OpenAI API request configuration:');
-            error_log('- Base URL: ' . $base_url);
-            error_log('- Assistant ID: ' . $assistant_id);
-            
             // Create thread
             $thread_id = $this->create_openai_thread($base_url, $headers);
             if (!$thread_id) {
@@ -673,19 +617,15 @@ class MultiLLMChatbot {
                 return;
             }
             
-            // Add context to message if available
-            $page_context = sanitize_text_field($_GET['context'] ?? '');
-            $full_message = $message;
-            if (!empty($page_context)) {
-                error_log('Adding context to OpenAI message. Context length: ' . strlen($page_context));
-                $full_message = "Context:\n$page_context\n\nUser Question: $message";
-            }
-
-            // Add message to thread
-            $message_result = $this->add_message_to_thread($base_url, $headers, $thread_id, $full_message);
-            if (is_wp_error($message_result)) {
-                echo "data: " . json_encode(['error' => 'Failed to add message']) . "\n\n";
-                return;
+            // Add all messages to thread
+            foreach ($messages as $msg) {
+                if ($msg['role'] !== 'system') { // Skip system messages for assistants
+                    $message_result = $this->add_message_to_thread($base_url, $headers, $thread_id, $msg['content']);
+                    if (is_wp_error($message_result)) {
+                        echo "data: " . json_encode(['error' => 'Failed to add message']) . "\n\n";
+                        return;
+                    }
+                }
             }
             
             // Start run
@@ -706,23 +646,11 @@ class MultiLLMChatbot {
             
             $base_url = 'https://api.mistral.ai/v1/agents/completions';
             
-            // Add context to message if available
-            $page_context = sanitize_text_field($_GET['context'] ?? '');
-            $messages = [];
-            
-            // Add user message with context if available
-            if (!empty($page_context)) {
-                $messages[] = [
-                    'role' => 'user',
-                    'content' => "Here's some context about the current page that might be relevant to my question. Use it only if it helps answer my question:\n\n$page_context\n\nMy question is: $message"
-                ];
-            } else {
-                $messages[] = ['role' => 'user', 'content' => $message];
-            }
-            
             $body = json_encode([
                 'agent_id' => $assistant_id,
-                'messages' => $messages,
+                'messages' => [
+                    ['role' => 'user', 'content' => $messages[count($messages) - 1]['content']]
+                ],
                 'stream' => true
             ]);
             
