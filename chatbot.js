@@ -86,25 +86,10 @@ document.addEventListener("DOMContentLoaded", function () {
         }
     }
 
-    // Add conversation history tracking
-    let conversationHistory = [];
-    const MAX_HISTORY = 5;
-
-    function addToHistory(role, content) {
-        conversationHistory.push({ role, content });
-        // Keep only the last 5 pairs (10 messages: 5 questions + 5 answers)
-        if (conversationHistory.length > MAX_HISTORY * 2) {
-            conversationHistory = conversationHistory.slice(-MAX_HISTORY * 2);
-        }
-    }
-
     // Update sendMessage function
     function sendMessage() {
         const message = chatInput.value.trim();
         if (!message) return;
-
-        // Add user message to history
-        addToHistory('user', message);
 
         // Escape HTML in user message
         const escapedMessage = message.replace(/[&<>"']/g, function(char) {
@@ -158,7 +143,7 @@ document.addEventListener("DOMContentLoaded", function () {
                 ? `&_wpnonce=${chatbot_ajax.nonce}` 
                 : '';
             
-            const url = `${chatbot_ajax.ajaxurl}?action=chatbot_request&message=${encodeURIComponent(message)}&history=${encodeURIComponent(JSON.stringify(conversationHistory))}${contextParam}${nonceParam}&_=${Date.now()}`;
+            const url = `${chatbot_ajax.ajaxurl}?action=chatbot_request&message=${encodeURIComponent(message)}${contextParam}${nonceParam}&_=${Date.now()}`;
             
             try {
                 const response = await fetch(url, {
@@ -209,11 +194,6 @@ document.addEventListener("DOMContentLoaded", function () {
                                 
                                 fullResponse += data.content;
                                 typingSpan.innerHTML = marked.parse(fullResponse);
-
-                                // Add assistant response to history when complete
-                                if (fullResponse) {
-                                    addToHistory('assistant', fullResponse);
-                                }
 
                                 saveChatHistory();
                                 chatResponse.scrollTop = chatResponse.scrollHeight;
@@ -272,7 +252,6 @@ document.addEventListener("DOMContentLoaded", function () {
         if (confirm("Are you sure you want to clear the chat history?")) {
             chatResponse.innerHTML = '';
             localStorage.removeItem('chatbotHistory');
-            conversationHistory = []; // Clear conversation history
         }
     });
 });

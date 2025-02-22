@@ -456,37 +456,20 @@ class MultiLLMChatbot {
                 return;
             }
 
-            // Build messages array with history and context
-            $messages = [];
-            if (!empty($definition)) {
-                $messages[] = ['role' => 'system', 'content' => $definition];
-            }
-            
-            // Add conversation history
-            $history = json_decode(sanitize_text_field($_GET['history'] ?? '[]'), true);
-            foreach ($history as $entry) {
-                $messages[] = [
-                    'role' => $entry['role'],
-                    'content' => $entry['content']
-                ];
-            }
-            
             // Add current message with URL context if available
             $current_url = get_permalink();
             $context_message = $current_url && is_singular()
                 ? "I'm on this page: $current_url. If you can browse it, please use its content to help answer my question. If you can't access it, just answer my question directly. Here's my question: $message"
                 : $message;
-            
-            $messages[] = ['role' => 'user', 'content' => $context_message];
 
             // Route to appropriate handler
             if (($provider === 'openai' || $provider === 'mistral') && 
                 $use_assistant && !empty($assistant_id)) {
                 error_log("Using assistant/agent API for $provider");
-                $this->handle_assistant_request($provider, $api_key, $assistant_id, $messages);
+                $this->handle_assistant_request($provider, $api_key, $assistant_id, $context_message);
             } else {
                 error_log("Using standard chat API for $provider");
-                $this->handle_chat_api_request($provider, $api_key, $messages);
+                $this->handle_chat_api_request($provider, $api_key, $context_message, $definition);
             }
         } catch (Exception $e) {
             error_log('Error: ' . $e->getMessage());
