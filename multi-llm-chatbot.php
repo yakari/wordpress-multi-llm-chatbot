@@ -3,7 +3,7 @@
  * Plugin Name: Multi-LLM Chatbot
  * Plugin URI: https://github.com/yakari/wordpress-multi-llm-chatbot
  * Description: Plugin WordPress pour intégrer un chatbot compatible avec OpenAI, Claude, Perplexity, Google Gemini et Mistral.
- * Version: 1.29.0
+ * Version: 1.30.0
  * Author: Yann Poirier <yakari@yakablog.info>
  * Author URI: https://foliesenbaie.fr
  * License: Apache-2.0
@@ -64,6 +64,9 @@ class MultiLLMChatbot {
             if (in_array($provider, ['openai', 'mistral'])) {
                 register_setting('multi_llm_chatbot_settings', "chatbot_{$provider}_assistant_id");
                 register_setting('multi_llm_chatbot_settings', "chatbot_{$provider}_use_assistant");
+                if ($provider === 'openai') {
+                    register_setting('multi_llm_chatbot_settings', "chatbot_{$provider}_model");
+                }
             }
         }
 
@@ -245,6 +248,11 @@ class MultiLLMChatbot {
         $api_key = get_option("chatbot_{$provider_key}_api_key", '');
         $this->render_api_key_field($provider_key, $provider_name, $current_provider, $api_key);
 
+        // Model selection for OpenAI standard API
+        if ($provider_key === 'openai') {
+            $this->render_model_selection_field($provider_key, $current_provider);
+        }
+
         // Assistant/Agent fields for supported providers
         if (in_array($provider_key, ['openai', 'mistral'])) {
             $this->render_assistant_fields($provider_key, $provider_name, $current_provider);
@@ -279,6 +287,31 @@ class MultiLLMChatbot {
                         For full conversation history support, use the standard Mistral API instead.
                     </p>
                 <?php endif; ?>
+            </td>
+        </tr>
+        <?php
+    }
+
+    /**
+     * Renders the model selection field for OpenAI
+     */
+    private function render_model_selection_field($provider_key, $current_provider) {
+        $use_assistant = get_option("chatbot_{$provider_key}_use_assistant", '');
+        $selected_model = get_option("chatbot_{$provider_key}_model", 'gpt-4-turbo-preview');
+        ?>
+        <tr class="model-selection-field" data-provider="<?php echo esc_attr($provider_key); ?>"
+            style="<?php echo $current_provider === $provider_key && !$use_assistant ? '' : 'display: none;'; ?>">
+            <th scope="row">Model</th>
+            <td>
+                <select name="chatbot_<?php echo esc_attr($provider_key); ?>_model" 
+                        id="openai-model-select"
+                        class="regular-text">
+                    <option value="gpt-4-turbo-preview" <?php selected($selected_model, 'gpt-4-turbo-preview'); ?>>GPT-4 Turbo</option>
+                    <option value="gpt-4" <?php selected($selected_model, 'gpt-4'); ?>>GPT-4</option>
+                    <option value="gpt-3.5-turbo" <?php selected($selected_model, 'gpt-3.5-turbo'); ?>>GPT-3.5 Turbo</option>
+                </select>
+                <button type="button" id="fetch-models" class="button">Fetch Available Models</button>
+                <p class="description">Select the OpenAI model to use for chat completions.</p>
             </td>
         </tr>
         <?php
@@ -537,8 +570,9 @@ class MultiLLMChatbot {
         switch ($provider) {
             case 'openai':
                 $url = 'https://api.openai.com/v1/chat/completions';
+                $model = get_option('chatbot_openai_model', 'gpt-4-turbo-preview');
                 $body = json_encode([
-                    'model' => 'gpt-4-turbo-preview',
+                    'model' => $model,
                     'messages' => $messages,
                     'stream' => true
                 ]);

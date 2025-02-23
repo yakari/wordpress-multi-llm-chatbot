@@ -106,4 +106,51 @@ jQuery(document).ready(function($) {
         
         updateDefinitionDescription(provider, isChecked);
     });
+
+    // Handle model fetching
+    $('#fetch-models').on('click', function() {
+        const button = $(this);
+        const select = $('#openai-model-select');
+        const apiKey = $('input[name="chatbot_openai_api_key"]').val();
+        
+        if (!apiKey) {
+            alert('Please enter an OpenAI API key first');
+            return;
+        }
+
+        button.prop('disabled', true).text('Fetching...');
+        
+        $.ajax({
+            url: 'https://api.openai.com/v1/models',
+            headers: {
+                'Authorization': 'Bearer ' + apiKey
+            },
+            success: function(response) {
+                select.empty();
+                
+                // Filter for chat models
+                const chatModels = response.data
+                    .filter(model => model.id.includes('gpt'))
+                    .sort((a, b) => b.id.localeCompare(a.id));
+                
+                chatModels.forEach(model => {
+                    select.append(new Option(model.id, model.id));
+                });
+            },
+            error: function(xhr) {
+                alert('Error fetching models: ' + xhr.responseText);
+            },
+            complete: function() {
+                button.prop('disabled', false).text('Fetch Available Models');
+            }
+        });
+    });
+
+    // Show/hide model selection based on assistant toggle
+    $('.use-assistant-checkbox').on('change', function() {
+        const provider = $(this).closest('[data-provider]').data('provider');
+        if (provider === 'openai') {
+            $('.model-selection-field').toggle(!this.checked);
+        }
+    });
 }); 

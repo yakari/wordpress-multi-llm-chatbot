@@ -2,6 +2,10 @@
 
 All notable changes to the Multi-LLM Chatbot plugin will be documented in this file.
 
+## [1.30.0] - 2025-02-22
+### Added
+- Model selection for OpenAI standard API with model fetching capability
+
 ## [1.29.0] - 2025-02-22
 ### Added
 - Warning message in admin interface about Mistral Agent API's limited conversation history support
