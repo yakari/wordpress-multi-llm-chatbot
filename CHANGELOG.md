@@ -14,6 +14,8 @@ All notable changes to the Multi-LLM Chatbot plugin will be documented in this f
 - Added persistence for fetched models list in database
 - Fixed model selection visibility when switching providers
 - Fixed duplicate model dropdowns with assistant toggle
+- Improved visibility handling for assistant/agent fields and instructions
+- Unified chatbot instructions across all providers
 
 ## [1.29.0] - 2025-02-22
 ### Added

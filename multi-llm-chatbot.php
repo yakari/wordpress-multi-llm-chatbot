@@ -47,6 +47,7 @@ class MultiLLMChatbot {
         // Core settings
         register_setting('multi_llm_chatbot_settings', 'chatbot_provider');
         register_setting('multi_llm_chatbot_settings', 'chatbot_visibility');
+        register_setting('multi_llm_chatbot_settings', 'chatbot_definition');
         register_setting('multi_llm_chatbot_settings', 'chatbot_use_context', [
             'type' => 'boolean',
             'default' => false,
@@ -59,13 +60,11 @@ class MultiLLMChatbot {
         $providers = ['openai', 'claude', 'perplexity', 'gemini', 'mistral'];
         foreach ($providers as $provider) {
             register_setting('multi_llm_chatbot_settings', "chatbot_{$provider}_api_key");
-            register_setting('multi_llm_chatbot_settings', "chatbot_{$provider}_definition");
             
             // Special settings for providers with assistant/agent capabilities
             if (in_array($provider, ['openai', 'mistral'])) {
                 register_setting('multi_llm_chatbot_settings', "chatbot_{$provider}_assistant_id");
                 register_setting('multi_llm_chatbot_settings', "chatbot_{$provider}_use_assistant");
-                // Register model setting for both OpenAI and Mistral
                 register_setting('multi_llm_chatbot_settings', "chatbot_{$provider}_model");
             }
         }
@@ -209,6 +208,9 @@ class MultiLLMChatbot {
                     foreach ($providers as $provider_key => $provider_name) {
                         $this->render_provider_fields($provider_key, $provider_name, $current_provider);
                     }
+                    
+                    // Render shared definition field once
+                    $this->render_definition_field($current_provider);
                     ?>
 
                     <!-- Visibility Setting -->
@@ -257,9 +259,6 @@ class MultiLLMChatbot {
         if (in_array($provider_key, ['openai', 'mistral'])) {
             $this->render_assistant_fields($provider_key, $provider_name, $current_provider);
         }
-
-        // Instructions/Definition field
-        $this->render_definition_field($provider_key, $current_provider);
     }
 
     /**
@@ -368,20 +367,13 @@ class MultiLLMChatbot {
             </td>
         </tr>
         <tr class="assistant-id-field" data-provider="<?php echo esc_attr($provider_key); ?>"
-            style="<?php echo $current_provider === $provider_key ? '' : 'display: none;'; ?>">
+            style="<?php echo $current_provider === $provider_key && $use_assistant ? '' : 'display: none;'; ?>">
             <th scope="row"><?php echo esc_html($provider_name); ?> Assistant ID</th>
             <td>
-                <!-- Regular input field -->
                 <input type="text" 
                        name="chatbot_<?php echo esc_attr($provider_key); ?>_assistant_id"
                        value="<?php echo esc_attr($assistant_id); ?>"
                        class="regular-text">
-                <!-- Display-only field for disabled state -->
-                <input type="text" 
-                       value="<?php echo esc_attr($assistant_id); ?>"
-                       class="disabled-display regular-text"
-                       disabled
-                       style="display: <?php echo empty($use_assistant) ? 'block' : 'none'; ?>;">
                 <p class="description">
                     <?php if ($provider_key === 'openai'): ?>
                         Enter your OpenAI Assistant ID (starts with "asst_")
@@ -397,35 +389,27 @@ class MultiLLMChatbot {
     /**
      * Renders the definition/instructions field for a provider
      * 
-     * @param string $provider_key Provider identifier
      * @param string $current_provider Currently selected provider
      */
-    private function render_definition_field($provider_key, $current_provider) {
-        error_log("Rendering definition field for: $provider_key");
-        $definition = get_option("chatbot_{$provider_key}_definition", '');
-        $use_assistant = get_option("chatbot_{$provider_key}_use_assistant", '');
+    private function render_definition_field($current_provider) {
+        error_log("Rendering definition field");
+        $definition = get_option("chatbot_definition", '');
+        $use_assistant = get_option("chatbot_{$current_provider}_use_assistant", '');
         ?>
-        <tr class="assistant-definition-field" data-provider="<?php echo esc_attr($provider_key); ?>"
-            style="<?php echo $current_provider === $provider_key ? '' : 'display: none;'; ?>">
+        <tr class="assistant-definition-field"
+            style="display: <?php echo $use_assistant ? 'none' : 'table-row'; ?>">
             <th scope="row">Instructions</th>
             <td>
                 <textarea 
-                    name="chatbot_<?php echo esc_attr($provider_key); ?>_definition"
+                    name="chatbot_definition"
                     rows="10"
-                    class="large-text code<?php echo $use_assistant ? ' disabled-field' : ''; ?>"
+                    class="large-text code"
                     placeholder="Enter instructions for the AI..."
-                    <?php echo $use_assistant ? 'readonly' : ''; ?>
                 ><?php echo esc_textarea($definition); ?></textarea>
                 <p class="description">
-                    <?php if ($provider_key === 'openai' || $provider_key === 'mistral'): ?>
-                        <?php if ($use_assistant): ?>
-                            Instructions are managed through the provider's interface in Assistant/Agent mode
-                        <?php else: ?>
-                            Define the AI's behavior for direct chat API usage
-                        <?php endif; ?>
-                    <?php else: ?>
-                        Define how the AI should behave and what capabilities it should have
-                    <?php endif; ?>
+                    <?php echo $use_assistant ? 
+                        'Instructions are managed through the provider\'s interface in Assistant/Agent mode' : 
+                        'Define how the AI should behave and what capabilities it should have'; ?>
                 </p>
             </td>
         </tr>
@@ -507,7 +491,7 @@ class MultiLLMChatbot {
             $provider = get_option('chatbot_provider', 'openai');
             $use_assistant = get_option("chatbot_{$provider}_use_assistant", false);
             $assistant_id = get_option("chatbot_{$provider}_assistant_id");
-            $definition = get_option("chatbot_{$provider}_definition");
+            $definition = get_option("chatbot_definition", '');
             
             $api_key = get_option("chatbot_{$provider}_api_key");
             if (empty($api_key)) {
