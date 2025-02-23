@@ -2,6 +2,17 @@
 
 All notable changes to the Multi-LLM Chatbot plugin will be documented in this file.
 
+## [1.31.0] - 2025-02-22
+### Changed
+- Improved field visibility handling in admin interface
+- Better organization of model selection and assistant fields
+
+### Fixed
+- Fixed assistant ID field visibility when switching providers
+- Fixed instructions field visibility across all providers
+- Added warning message for Mistral Agent API limitations
+- Improved UI consistency for assistant mode toggles
+
 ## [1.30.0] - 2025-02-22
 ### Added
 - Model selection for OpenAI standard API with model fetching capability

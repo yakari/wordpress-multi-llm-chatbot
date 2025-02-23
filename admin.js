@@ -6,18 +6,17 @@ jQuery(document).ready(function($) {
         // Hide all model selection fields first
         $('.model-selection-field').hide();
         
+        // Get assistant mode state for the selected provider
+        const useAssistant = $(`.use-assistant-checkbox[name="chatbot_${selectedProvider}_use_assistant"]`).is(':checked');
+        
         // Show the correct model field based on provider and assistant mode
         if (selectedProvider === 'openai' || selectedProvider === 'mistral') {
-            const useAssistant = $(`.use-assistant-checkbox[name="chatbot_${selectedProvider}_use_assistant"]`).is(':checked');
             if (!useAssistant) {
                 $(`.model-selection-field[data-provider="${selectedProvider}"]`).show();
             }
         }
         
         // Show instructions unless assistant mode is enabled
-        const useAssistant = selectedProvider === 'openai' || selectedProvider === 'mistral' ?
-            $(`.use-assistant-checkbox[name="chatbot_${selectedProvider}_use_assistant"]`).is(':checked') :
-            false;
         $('.assistant-definition-field').toggle(!useAssistant);
         
         // Hide all provider-specific fields with fade
@@ -26,7 +25,10 @@ jQuery(document).ready(function($) {
                 // Show selected provider fields after fade
                 $(`.api-key-field[data-provider="${selectedProvider}"]`).fadeIn(200);
                 $(`.api-choice-field[data-provider="${selectedProvider}"]`).fadeIn(200);
-                $(`.assistant-id-field[data-provider="${selectedProvider}"]`).fadeIn(200);
+                // Only show assistant ID field if assistant mode is enabled
+                if (useAssistant) {
+                    $(`.assistant-id-field[data-provider="${selectedProvider}"]`).fadeIn(200);
+                }
             });
     });
 
@@ -35,16 +37,23 @@ jQuery(document).ready(function($) {
         const provider = $(this).closest('tr').data('provider');
         const assistantIdRow = $(`.assistant-id-field[data-provider="${provider}"]`);
         const definitionRow = $('.assistant-definition-field');
+        const mistralWarning = $(this).closest('td').find('.mistral-warning');
         
         // Show/hide the appropriate input field
         if (this.checked) {
             // Show assistant ID field and hide definition
             assistantIdRow.fadeIn(200);
             definitionRow.fadeOut(200);
+            if (provider === 'mistral') {
+                mistralWarning.fadeIn(200);
+            }
         } else {
             // Hide assistant ID field and show definition
             assistantIdRow.fadeOut(200);
             definitionRow.fadeIn(200);
+            if (provider === 'mistral') {
+                mistralWarning.fadeOut(200);
+            }
         }
         
         // Update description text
@@ -65,6 +74,7 @@ jQuery(document).ready(function($) {
         const isChecked = $(this).is(':checked');
         const assistantIdRow = $(`.assistant-id-field[data-provider="${provider}"]`);
         const definitionRow = $('.assistant-definition-field');
+        const mistralWarning = $(this).closest('td').find('.mistral-warning');
         
         // Only process the current provider's checkbox
         const currentProvider = $('#chatbot_provider').val();
@@ -77,10 +87,16 @@ jQuery(document).ready(function($) {
             // Show assistant ID field and hide definition
             assistantIdRow.show();
             definitionRow.hide();
+            if (provider === 'mistral') {
+                mistralWarning.show();
+            }
         } else {
             // Hide assistant ID field and show definition
-            assistantIdRow.show();
+            assistantIdRow.hide();
             definitionRow.show();
+            if (provider === 'mistral') {
+                mistralWarning.hide();
+            }
         }
         
         updateDefinitionDescription(provider, isChecked);

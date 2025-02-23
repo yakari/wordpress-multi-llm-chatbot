@@ -3,7 +3,7 @@
  * Plugin Name: Multi-LLM Chatbot
  * Plugin URI: https://github.com/yakari/wordpress-multi-llm-chatbot
  * Description: Plugin WordPress pour intégrer un chatbot compatible avec OpenAI, Claude, Perplexity, Google Gemini et Mistral.
- * Version: 1.30.0
+ * Version: 1.31.0
  * Author: Yann Poirier <yakari@yakablog.info>
  * Author URI: https://foliesenbaie.fr
  * License: Apache-2.0
@@ -250,14 +250,12 @@ class MultiLLMChatbot {
         $api_key = get_option("chatbot_{$provider_key}_api_key", '');
         $this->render_api_key_field($provider_key, $provider_name, $current_provider, $api_key);
 
-        // Model selection for standard APIs
-        if (in_array($provider_key, ['openai', 'mistral'])) {
-            $this->render_model_selection_field($provider_key, $current_provider);
-        }
-
         // Assistant/Agent fields for supported providers
         if (in_array($provider_key, ['openai', 'mistral'])) {
             $this->render_assistant_fields($provider_key, $provider_name, $current_provider);
+            
+            // Model selection field right after API choice
+            $this->render_model_selection_field($provider_key, $current_provider);
         }
     }
 
@@ -280,12 +278,6 @@ class MultiLLMChatbot {
                        name="chatbot_<?php echo esc_attr($provider_key); ?>_api_key"
                        value="<?php echo esc_attr($api_key); ?>"
                        class="regular-text">
-                <?php if ($provider_key === 'mistral' && get_option("chatbot_{$provider_key}_use_assistant")): ?>
-                    <p class="description" style="color: #d63638;">
-                        Note: Mistral Agent API currently has limited support for conversation history.
-                        For full conversation history support, use the standard Mistral API instead.
-                    </p>
-                <?php endif; ?>
             </td>
         </tr>
         <?php
@@ -364,6 +356,12 @@ class MultiLLMChatbot {
                            class="use-assistant-checkbox">
                     Use <?php echo $provider_key === 'openai' ? 'Assistant' : 'Agent'; ?> API
                 </label>
+                <?php if ($provider_key === 'mistral'): ?>
+                    <p class="description mistral-warning" style="color: #d63638; display: <?php echo $use_assistant ? 'block' : 'none'; ?>;">
+                        Note: Mistral Agent API currently has limited support for conversation history. 
+                        For full conversation history support, use the standard Mistral API instead.
+                    </p>
+                <?php endif; ?>
             </td>
         </tr>
         <tr class="assistant-id-field" data-provider="<?php echo esc_attr($provider_key); ?>"
