@@ -5,6 +5,7 @@ All notable changes to the Multi-LLM Chatbot plugin will be documented in this f
 ## [1.30.0] - 2025-02-22
 ### Added
 - Model selection for OpenAI standard API with model fetching capability
+- Added pricing information for OpenAI models in selection dropdown
 
 ## [1.29.0] - 2025-02-22
 ### Added

@@ -306,12 +306,12 @@ class MultiLLMChatbot {
                 <select name="chatbot_<?php echo esc_attr($provider_key); ?>_model" 
                         id="openai-model-select"
                         class="regular-text">
-                    <option value="gpt-4-turbo-preview" <?php selected($selected_model, 'gpt-4-turbo-preview'); ?>>GPT-4 Turbo</option>
-                    <option value="gpt-4" <?php selected($selected_model, 'gpt-4'); ?>>GPT-4</option>
-                    <option value="gpt-3.5-turbo" <?php selected($selected_model, 'gpt-3.5-turbo'); ?>>GPT-3.5 Turbo</option>
+                    <option value="gpt-4-turbo-preview" <?php selected($selected_model, 'gpt-4-turbo-preview'); ?>>GPT-4 Turbo (1¢ / 3¢ per 1K tokens)</option>
+                    <option value="gpt-4" <?php selected($selected_model, 'gpt-4'); ?>>GPT-4 (3¢ / 6¢ per 1K tokens)</option>
+                    <option value="gpt-3.5-turbo" <?php selected($selected_model, 'gpt-3.5-turbo'); ?>>GPT-3.5 Turbo (0.05¢ / 0.15¢ per 1K tokens)</option>
                 </select>
                 <button type="button" id="fetch-models" class="button">Fetch Available Models</button>
-                <p class="description">Select the OpenAI model to use for chat completions.</p>
+                <p class="description">Select the OpenAI model to use. Prices shown as (input cost / output cost) per 1,000 tokens.</p>
             </td>
         </tr>
         <?php

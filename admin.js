@@ -113,6 +113,13 @@ jQuery(document).ready(function($) {
         const select = $('#openai-model-select');
         const apiKey = $('input[name="chatbot_openai_api_key"]').val();
         
+        // Pricing per 1K tokens (as of Feb 2025)
+        const modelPricing = {
+            'gpt-4-turbo-preview': { input: 0.01, output: 0.03 },
+            'gpt-4': { input: 0.03, output: 0.06 },
+            'gpt-3.5-turbo': { input: 0.0005, output: 0.0015 }
+        };
+        
         if (!apiKey) {
             alert('Please enter an OpenAI API key first');
             return;
@@ -128,9 +135,19 @@ jQuery(document).ready(function($) {
             success: function(response) {
                 select.empty();
                 
-                // Filter for chat models
+                // Filter for chat models and add default options first
+                // Add known models with pricing first
+                Object.entries(modelPricing).forEach(([modelId, pricing]) => {
+                    select.append(new Option(
+                        `${modelId} (${pricing.input}¢ / ${pricing.output}¢ per 1K tokens)`,
+                        modelId
+                    ));
+                });
+                
+                // Then add any other GPT models without pricing
                 const chatModels = response.data
                     .filter(model => model.id.includes('gpt'))
+                    .filter(model => !modelPricing[model.id]) // Only add models we don't have pricing for
                     .sort((a, b) => b.id.localeCompare(a.id));
                 
                 chatModels.forEach(model => {
