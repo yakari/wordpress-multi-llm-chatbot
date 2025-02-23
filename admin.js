@@ -1,7 +1,18 @@
 jQuery(document).ready(function($) {
     // Handle provider switching for definition fields
     $('#chatbot_provider').on('change', function() {
-        var selectedProvider = $(this).val();
+        const selectedProvider = $(this).val();
+        
+        // Hide all model selection fields first
+        $('.model-selection-field').hide();
+        
+        // Show the correct model field based on provider and assistant mode
+        if (selectedProvider === 'openai' || selectedProvider === 'mistral') {
+            const useAssistant = $(`.use-assistant-checkbox[name="chatbot_${selectedProvider}_use_assistant"]`).is(':checked');
+            if (!useAssistant) {
+                $(`.model-selection-field[data-provider="${selectedProvider}"]`).show();
+            }
+        }
         
         // Hide all provider-specific fields with fade
         $('.api-key-field, .api-choice-field, .assistant-id-field, .assistant-definition-field')
@@ -146,10 +157,15 @@ jQuery(document).ready(function($) {
                 'Authorization': 'Bearer ' + apiKey
             },
             success: function(response) {
+                const currentValue = select.val(); // Store current selection
                 select.empty();
+                
+                // Create a map of all models for saving
+                let allModels = {};
                 
                 // Add known models with pricing first
                 Object.entries(modelPricing).forEach(([modelId, pricing]) => {
+                    allModels[modelId] = pricing;
                     select.append(new Option(
                         `${modelId} (${pricing.input}¢ / ${pricing.output}¢ per 1K tokens)`,
                         modelId
@@ -163,8 +179,22 @@ jQuery(document).ready(function($) {
                     .sort((a, b) => b.id.localeCompare(a.id));
                 
                 chatModels.forEach(model => {
+                    allModels[model.id] = null; // No pricing info
                     select.append(new Option(model.id, model.id));
                 });
+                
+                // Save all models to WordPress options
+                $.post(ajaxurl, {
+                    action: 'save_provider_models',
+                    provider: providerId,
+                    models: JSON.stringify(allModels),
+                    _wpnonce: chatbotAdmin.nonce
+                });
+                
+                // Restore previous selection if it exists in the new options
+                if (currentValue && select.find(`option[value="${currentValue}"]`).length) {
+                    select.val(currentValue);
+                }
             },
             error: function(xhr) {
                 alert('Error fetching models: ' + xhr.responseText);
@@ -178,8 +208,15 @@ jQuery(document).ready(function($) {
     // Show/hide model selection based on assistant toggle
     $('.use-assistant-checkbox').on('change', function() {
         const provider = $(this).closest('[data-provider]').data('provider');
-        if (provider === 'openai') {
-            $('.model-selection-field').toggle(!this.checked);
+        
+        // Hide all model selection fields first
+        $('.model-selection-field').hide();
+        
+        // Show the correct model field if assistant is not checked
+        if (!this.checked) {
+            $(`.model-selection-field[data-provider="${provider}"]`).show();
         }
+        
+        // Existing code for assistant fields...
     });
 }); 

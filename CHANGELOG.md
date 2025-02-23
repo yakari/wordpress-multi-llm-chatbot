@@ -8,6 +8,13 @@ All notable changes to the Multi-LLM Chatbot plugin will be documented in this f
 - Added pricing information for OpenAI models in selection dropdown
 - Added model selection and pricing for Mistral standard API
 
+### Fixed
+- Model selection now persists for both OpenAI and Mistral
+- Selected model is preserved when fetching available models
+- Added persistence for fetched models list in database
+- Fixed model selection visibility when switching providers
+- Fixed duplicate model dropdowns with assistant toggle
+
 ## [1.29.0] - 2025-02-22
 ### Added
 - Warning message in admin interface about Mistral Agent API's limited conversation history support

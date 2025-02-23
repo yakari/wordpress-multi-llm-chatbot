@@ -26,6 +26,7 @@ class MultiLLMChatbot {
         add_action('admin_menu', [$this, 'create_admin_page']);
         add_action('admin_init', [$this, 'register_settings']);
         add_action('admin_enqueue_scripts', [$this, 'enqueue_admin_scripts']);
+        add_action('wp_ajax_save_provider_models', [$this, 'save_provider_models']);
         
         // Frontend hooks
         add_action('wp_footer', [$this, 'render_chatbot']);
@@ -64,9 +65,8 @@ class MultiLLMChatbot {
             if (in_array($provider, ['openai', 'mistral'])) {
                 register_setting('multi_llm_chatbot_settings', "chatbot_{$provider}_assistant_id");
                 register_setting('multi_llm_chatbot_settings', "chatbot_{$provider}_use_assistant");
-                if ($provider === 'openai') {
-                    register_setting('multi_llm_chatbot_settings', "chatbot_{$provider}_model");
-                }
+                // Register model setting for both OpenAI and Mistral
+                register_setting('multi_llm_chatbot_settings', "chatbot_{$provider}_model");
             }
         }
 
@@ -299,8 +299,12 @@ class MultiLLMChatbot {
         $use_assistant = get_option("chatbot_{$provider_key}_use_assistant", '');
         $default_model = $provider_key === 'openai' ? 'gpt-4-turbo-preview' : 'mistral-large-latest';
         $selected_model = get_option("chatbot_{$provider_key}_model", $default_model);
+        $available_models = get_option("chatbot_{$provider_key}_available_models", []);
+        
+        // Generate unique ID for the model selection field
+        $field_id = "model-selection-{$provider_key}";
         ?>
-        <tr class="model-selection-field" data-provider="<?php echo esc_attr($provider_key); ?>"
+        <tr class="model-selection-field" id="<?php echo esc_attr($field_id); ?>" data-provider="<?php echo esc_attr($provider_key); ?>"
             style="<?php echo $current_provider === $provider_key && !$use_assistant ? '' : 'display: none;'; ?>">
             <th scope="row">Model</th>
             <td>
@@ -316,6 +320,19 @@ class MultiLLMChatbot {
                     <option value="mistral-medium" <?php selected($selected_model, 'mistral-medium'); ?>>Mistral Medium (0.6¢ / 1.8¢ per 1K tokens)</option>
                     <option value="mistral-small" <?php selected($selected_model, 'mistral-small'); ?>>Mistral Small (0.14¢ / 0.42¢ per 1K tokens)</option>
                     <?php endif; ?>
+                    <?php
+                    // Add any additional models from the database
+                    foreach ($available_models as $model_id => $pricing) {
+                        if (!in_array($model_id, ['gpt-4-turbo-preview', 'gpt-4', 'gpt-3.5-turbo', 'mistral-large-latest', 'mistral-medium', 'mistral-small'])) {
+                            echo sprintf(
+                                '<option value="%s" %s>%s</option>',
+                                esc_attr($model_id),
+                                selected($selected_model, $model_id, false),
+                                esc_html($model_id)
+                            );
+                        }
+                    }
+                    ?>
                 </select>
                 <button type="button" id="fetch-models-<?php echo esc_attr($provider_key); ?>" class="button fetch-models">Fetch Available Models</button>
                 <p class="description">Select the <?php echo ucfirst($provider_key); ?> model to use. Prices shown as (input cost / output cost) per 1,000 tokens.</p>
@@ -1225,6 +1242,27 @@ class MultiLLMChatbot {
         }
         
         return $context;
+    }
+
+    /**
+     * Saves the list of available models for a provider
+     */
+    public function save_provider_models() {
+        check_ajax_referer('chatbot_admin_nonce');
+        
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Unauthorized');
+        }
+        
+        $provider = sanitize_text_field($_POST['provider']);
+        $models = json_decode(stripslashes($_POST['models']), true);
+        
+        if (!$models) {
+            wp_send_json_error('Invalid models data');
+        }
+        
+        update_option("chatbot_{$provider}_available_models", $models);
+        wp_send_json_success();
     }
 }
 
