@@ -6,6 +6,7 @@ All notable changes to the Multi-LLM Chatbot plugin will be documented in this f
 ### Added
 - Model selection for OpenAI standard API with model fetching capability
 - Added pricing information for OpenAI models in selection dropdown
+- Added model selection and pricing for Mistral standard API
 
 ## [1.29.0] - 2025-02-22
 ### Added

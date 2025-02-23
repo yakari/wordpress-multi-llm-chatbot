@@ -107,35 +107,47 @@ jQuery(document).ready(function($) {
         updateDefinitionDescription(provider, isChecked);
     });
 
-    // Handle model fetching
-    $('#fetch-models').on('click', function() {
+    // Handle model fetching for both providers
+    $('.fetch-models').on('click', function() {
+        const providerId = this.id.split('-').pop(); // 'openai' or 'mistral'
         const button = $(this);
-        const select = $('#openai-model-select');
-        const apiKey = $('input[name="chatbot_openai_api_key"]').val();
+        const select = $(`#${providerId}-model-select`);
+        const apiKey = $(`input[name="chatbot_${providerId}_api_key"]`).val();
         
-        // Pricing per 1K tokens (as of Feb 2025)
-        const modelPricing = {
+        // OpenAI pricing per 1K tokens
+        const openaiPricing = {
             'gpt-4-turbo-preview': { input: 0.01, output: 0.03 },
             'gpt-4': { input: 0.03, output: 0.06 },
             'gpt-3.5-turbo': { input: 0.0005, output: 0.0015 }
         };
         
+        // Mistral pricing per 1K tokens
+        const mistralPricing = {
+            'mistral-large-latest': { input: 0.025, output: 0.075 },
+            'mistral-medium': { input: 0.006, output: 0.018 },
+            'mistral-small': { input: 0.0014, output: 0.0042 }
+        };
+        
+        const modelPricing = providerId === 'openai' ? openaiPricing : mistralPricing;
+        const apiUrl = providerId === 'openai' 
+            ? 'https://api.openai.com/v1/models'
+            : 'https://api.mistral.ai/v1/models';
+        
         if (!apiKey) {
-            alert('Please enter an OpenAI API key first');
+            alert(`Please enter a ${providerId === 'openai' ? 'OpenAI' : 'Mistral'} API key first`);
             return;
         }
 
         button.prop('disabled', true).text('Fetching...');
         
         $.ajax({
-            url: 'https://api.openai.com/v1/models',
+            url: apiUrl,
             headers: {
                 'Authorization': 'Bearer ' + apiKey
             },
             success: function(response) {
                 select.empty();
                 
-                // Filter for chat models and add default options first
                 // Add known models with pricing first
                 Object.entries(modelPricing).forEach(([modelId, pricing]) => {
                     select.append(new Option(
@@ -144,10 +156,10 @@ jQuery(document).ready(function($) {
                     ));
                 });
                 
-                // Then add any other GPT models without pricing
+                // Then add any other models without pricing
                 const chatModels = response.data
-                    .filter(model => model.id.includes('gpt'))
-                    .filter(model => !modelPricing[model.id]) // Only add models we don't have pricing for
+                    .filter(model => providerId === 'openai' ? model.id.includes('gpt') : model.id.includes('mistral'))
+                    .filter(model => !modelPricing[model.id])
                     .sort((a, b) => b.id.localeCompare(a.id));
                 
                 chatModels.forEach(model => {

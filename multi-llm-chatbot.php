@@ -248,8 +248,8 @@ class MultiLLMChatbot {
         $api_key = get_option("chatbot_{$provider_key}_api_key", '');
         $this->render_api_key_field($provider_key, $provider_name, $current_provider, $api_key);
 
-        // Model selection for OpenAI standard API
-        if ($provider_key === 'openai') {
+        // Model selection for standard APIs
+        if (in_array($provider_key, ['openai', 'mistral'])) {
             $this->render_model_selection_field($provider_key, $current_provider);
         }
 
@@ -297,21 +297,28 @@ class MultiLLMChatbot {
      */
     private function render_model_selection_field($provider_key, $current_provider) {
         $use_assistant = get_option("chatbot_{$provider_key}_use_assistant", '');
-        $selected_model = get_option("chatbot_{$provider_key}_model", 'gpt-4-turbo-preview');
+        $default_model = $provider_key === 'openai' ? 'gpt-4-turbo-preview' : 'mistral-large-latest';
+        $selected_model = get_option("chatbot_{$provider_key}_model", $default_model);
         ?>
         <tr class="model-selection-field" data-provider="<?php echo esc_attr($provider_key); ?>"
             style="<?php echo $current_provider === $provider_key && !$use_assistant ? '' : 'display: none;'; ?>">
             <th scope="row">Model</th>
             <td>
                 <select name="chatbot_<?php echo esc_attr($provider_key); ?>_model" 
-                        id="openai-model-select"
+                        id="<?php echo esc_attr($provider_key); ?>-model-select"
                         class="regular-text">
+                    <?php if ($provider_key === 'openai'): ?>
                     <option value="gpt-4-turbo-preview" <?php selected($selected_model, 'gpt-4-turbo-preview'); ?>>GPT-4 Turbo (1¢ / 3¢ per 1K tokens)</option>
                     <option value="gpt-4" <?php selected($selected_model, 'gpt-4'); ?>>GPT-4 (3¢ / 6¢ per 1K tokens)</option>
                     <option value="gpt-3.5-turbo" <?php selected($selected_model, 'gpt-3.5-turbo'); ?>>GPT-3.5 Turbo (0.05¢ / 0.15¢ per 1K tokens)</option>
+                    <?php else: ?>
+                    <option value="mistral-large-latest" <?php selected($selected_model, 'mistral-large-latest'); ?>>Mistral Large (2.5¢ / 7.5¢ per 1K tokens)</option>
+                    <option value="mistral-medium" <?php selected($selected_model, 'mistral-medium'); ?>>Mistral Medium (0.6¢ / 1.8¢ per 1K tokens)</option>
+                    <option value="mistral-small" <?php selected($selected_model, 'mistral-small'); ?>>Mistral Small (0.14¢ / 0.42¢ per 1K tokens)</option>
+                    <?php endif; ?>
                 </select>
-                <button type="button" id="fetch-models" class="button">Fetch Available Models</button>
-                <p class="description">Select the OpenAI model to use. Prices shown as (input cost / output cost) per 1,000 tokens.</p>
+                <button type="button" id="fetch-models-<?php echo esc_attr($provider_key); ?>" class="button fetch-models">Fetch Available Models</button>
+                <p class="description">Select the <?php echo ucfirst($provider_key); ?> model to use. Prices shown as (input cost / output cost) per 1,000 tokens.</p>
             </td>
         </tr>
         <?php
@@ -581,8 +588,9 @@ class MultiLLMChatbot {
                 
             case 'mistral':
                 $url = 'https://api.mistral.ai/v1/chat/completions';
+                $model = get_option('chatbot_mistral_model', 'mistral-large-latest');
                 $body = json_encode([
-                    'model' => 'mistral-large-latest',
+                    'model' => $model,
                     'messages' => $messages,
                     'stream' => true
                 ]);
