@@ -18,7 +18,8 @@ document.addEventListener("DOMContentLoaded", function () {
             conversationHistory.forEach(entry => {
                 const messageDiv = document.createElement('div');
                 messageDiv.className = `message ${entry.role}`;
-                messageDiv.innerHTML = marked.parse(entry.content);
+                const label = entry.role === 'user' ? 'Vous' : 'Assistant';
+                messageDiv.innerHTML = `<strong>${label} :</strong> ${marked.parse(entry.content)}`;
                 chatResponse.appendChild(messageDiv);
             });
         }
@@ -163,10 +164,22 @@ document.addEventListener("DOMContentLoaded", function () {
         // Add user message to history and display
         addToHistory('user', message);
         
+        // Escape HTML in user message
+        const escapedMessage = message.replace(/[&<>"']/g, function(char) {
+            const entities = {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#39;'
+            };
+            return entities[char];
+        });
+        
         // Display user message
         const userDiv = document.createElement('div');
         userDiv.className = 'message user';
-        userDiv.innerHTML = marked.parse(message);
+        userDiv.innerHTML = `<strong>Vous :</strong> ${marked.parse(escapedMessage)}`;
         chatResponse.appendChild(userDiv);
         
         // Clear input
@@ -175,6 +188,7 @@ document.addEventListener("DOMContentLoaded", function () {
         // Create response container
         const responseDiv = document.createElement('div');
         responseDiv.className = 'message assistant';
+        responseDiv.innerHTML = '<strong>Assistant :</strong> ';
         const typingSpan = document.createElement('span');
         responseDiv.appendChild(typingSpan);
         chatResponse.appendChild(responseDiv);

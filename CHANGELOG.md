@@ -9,6 +9,8 @@ All notable changes to the Multi-LLM Chatbot plugin will be documented in this f
 ### Fixed
 - Improved logging for API responses
 - Better error handling for JSON decoding
+- Added HTML escaping for user messages to prevent XSS attacks
+- Restored clear message labels for users and assistant responses
 
 ## [1.28.0] - 2025-02-21
 ### Added
