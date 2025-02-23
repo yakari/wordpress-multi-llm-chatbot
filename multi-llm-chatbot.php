@@ -20,6 +20,8 @@ class MultiLLMChatbot {
     /**
      * Plugin initialization
      * Sets up all necessary WordPress hooks and filters
+     * 
+     * @since 1.0.0
      */
     public function __construct() {
         // Admin hooks
@@ -42,6 +44,10 @@ class MultiLLMChatbot {
     /**
      * Register plugin settings and options
      * Sets up all configurable options in the WordPress admin
+     * 
+     * @since 1.0.0
+     * @access public
+     * @return void
      */
     public function register_settings() {
         // Core settings
@@ -74,6 +80,11 @@ class MultiLLMChatbot {
 
     /**
      * Enqueue frontend scripts and styles
+     * Loads required CSS and JavaScript files for the chatbot interface
+     * 
+     * @since 1.0.0
+     * @access public
+     * @return void
      */
     public function enqueue_scripts() {
         // Enqueue CSS
@@ -105,7 +116,12 @@ class MultiLLMChatbot {
 
     /**
      * Enqueue admin scripts and styles
+     * Loads required JavaScript files for the admin interface
+     * 
+     * @since 1.0.0
+     * @access public
      * @param string $hook Current admin page hook
+     * @return void
      */
     public function enqueue_admin_scripts($hook) {
         // Only load on plugin settings page
@@ -132,6 +148,10 @@ class MultiLLMChatbot {
     /**
      * Creates the admin menu page for the plugin
      * Adds a new menu item under the WordPress admin menu
+     * 
+     * @since 1.0.0
+     * @access public
+     * @return void
      */
     public function create_admin_page() {
         add_menu_page(
@@ -150,6 +170,10 @@ class MultiLLMChatbot {
     /**
      * Renders the admin page content
      * Displays the settings form and handles all provider-specific fields
+     * 
+     * @since 1.0.0
+     * @access public
+     * @return void
      */
     public function admin_page_content() {
         error_log('Rendering admin page content');
@@ -237,11 +261,14 @@ class MultiLLMChatbot {
 
     /**
      * Renders the fields for a specific provider
-     * Handles API keys, assistant settings, and instructions fields
+     * Handles API keys, assistant settings, and model selection fields
      * 
-     * @param string $provider_key   Provider identifier
-     * @param string $provider_name  Display name of the provider
+     * @since 1.0.0
+     * @access private
+     * @param string $provider_key Provider identifier (openai, mistral, etc.)
+     * @param string $provider_name Display name of the provider
      * @param string $current_provider Currently selected provider
+     * @return void
      */
     private function render_provider_fields($provider_key, $provider_name, $current_provider) {
         error_log("Rendering fields for provider: $provider_key");
@@ -261,11 +288,15 @@ class MultiLLMChatbot {
 
     /**
      * Renders the API key field for a provider
+     * Creates a password input field for the API key with appropriate visibility
      * 
+     * @since 1.0.0
+     * @access private
      * @param string $provider_key Provider identifier
      * @param string $provider_name Display name of the provider
      * @param string $current_provider Currently selected provider
      * @param string $api_key Current API key value
+     * @return void
      */
     private function render_api_key_field($provider_key, $provider_name, $current_provider, $api_key) {
         error_log("Rendering API key field for: $provider_key");
@@ -284,7 +315,14 @@ class MultiLLMChatbot {
     }
 
     /**
-     * Renders the model selection field for OpenAI
+     * Renders the model selection field for supported providers
+     * Displays available models with pricing information and fetching capability
+     * 
+     * @since 1.30.0
+     * @access private
+     * @param string $provider_key Provider identifier (openai or mistral)
+     * @param string $current_provider Currently selected provider
+     * @return void
      */
     private function render_model_selection_field($provider_key, $current_provider) {
         $use_assistant = get_option("chatbot_{$provider_key}_use_assistant", '');
@@ -334,10 +372,14 @@ class MultiLLMChatbot {
 
     /**
      * Renders the assistant/agent fields for supported providers
+     * Handles assistant mode toggle and ID input fields
      * 
-     * @param string $provider_key Provider identifier
+     * @since 1.28.0
+     * @access private
+     * @param string $provider_key Provider identifier (openai or mistral)
      * @param string $provider_name Display name of the provider
      * @param string $current_provider Currently selected provider
+     * @return void
      */
     private function render_assistant_fields($provider_key, $provider_name, $current_provider) {
         error_log("Rendering assistant fields for: $provider_key");
@@ -385,9 +427,13 @@ class MultiLLMChatbot {
     }
 
     /**
-     * Renders the definition/instructions field for a provider
+     * Renders the shared definition/instructions field
+     * Displays the textarea for AI behavior instructions
      * 
+     * @since 1.31.0
+     * @access private
      * @param string $current_provider Currently selected provider
+     * @return void
      */
     private function render_definition_field($current_provider) {
         error_log("Rendering definition field");
@@ -416,7 +462,11 @@ class MultiLLMChatbot {
 
     /**
      * Renders the chatbot interface in the frontend
-     * Includes the markdown parser and basic chat UI elements
+     * Includes the markdown parser, chat UI elements, and context handling
+     * 
+     * @since 1.0.0
+     * @access public
+     * @return void
      */
     public function render_chatbot() {
         // Check visibility settings
@@ -456,7 +506,12 @@ class MultiLLMChatbot {
 
     /**
      * Handles incoming chat requests
-     * Main entry point for all chat interactions
+     * Main entry point for all chat interactions, handles different API types
+     * 
+     * @since 1.0.0
+     * @access public
+     * @return void
+     * @throws Exception When API request fails
      */
     public function handle_chat_request() {
         try {
@@ -525,10 +580,12 @@ class MultiLLMChatbot {
      * Prepares messages array with history and current message
      * Common function used by all providers
      * 
-     * @param array  $history   Previous messages history
-     * @param string $message   Current message
+     * @since 1.0.0
+     * @access private
+     * @param array  $history Previous messages history
+     * @param string $message Current message
      * @param string $definition Optional system message
-     * @return array            Formatted messages array
+     * @return array Formatted messages array for API request
      */
     private function prepare_messages($history, $message, $definition = '') {
         $messages = [];
@@ -563,81 +620,20 @@ class MultiLLMChatbot {
         return $messages;
     }
 
-    private function handle_chat_api_request($provider, $api_key, $message, $definition, $history) {
-        error_log("Handling standard chat request for $provider with history length: " . count($history));
-        
-        $headers = [
-            'Authorization: Bearer ' . $api_key,
-            'Content-Type: application/json'
-        ];
-
-        $messages = $this->prepare_messages($history, $message, $definition);
-
-        switch ($provider) {
-            case 'openai':
-                $url = 'https://api.openai.com/v1/chat/completions';
-                $model = get_option('chatbot_openai_model', 'gpt-4-turbo-preview');
-                $body = json_encode([
-                    'model' => $model,
-                    'messages' => $messages,
-                    'stream' => true
-                ]);
-                error_log("OpenAI request body: " . $body);
-                break;
-                
-            case 'mistral':
-                $url = 'https://api.mistral.ai/v1/chat/completions';
-                $model = get_option('chatbot_mistral_model', 'mistral-large-latest');
-                $body = json_encode([
-                    'model' => $model,
-                    'messages' => $messages,
-                    'stream' => true
-                ]);
-                error_log("Mistral request body: " . $body);
-                break;
-                
-            case 'claude':
-                $url = 'https://api.anthropic.com/v1/messages';
-                // Add Anthropic-specific headers
-                $headers = [
-                    'x-api-key: ' . $api_key,
-                    'anthropic-version: 2023-06-01',
-                    'Content-Type: application/json'
-                ];
-                $body = json_encode([
-                    'model' => 'claude-3-opus-20240229',
-                    'messages' => $messages,
-                    'stream' => true
-                ]);
-                break;
-                
-            case 'perplexity':
-                $url = 'https://api.perplexity.ai/chat/completions';
-                $body = json_encode([
-                    'model' => 'sonar-medium-online',
-                    'messages' => $messages,
-                    'stream' => true
-                ]);
-                break;
-                
-            case 'gemini':
-                $url = 'https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro-latest:generateContent';
-                // Add Gemini-specific headers
-                $headers = [
-                    'x-goog-api-key: ' . $api_key,
-                    'Content-Type: application/json'
-                ];
-                $body = json_encode([
-                    'contents' => $messages,
-                    'stream' => true
-                ]);
-                break;
-        }
-
-        $this->handle_standard_request($provider, $url, $headers, $body);
-    }
-
-    private function handle_openai_assistant($api_key, $assistant_id, $message, $history = []) {
+    /**
+     * Handles OpenAI Assistant API requests
+     * Manages thread creation, message addition, and response streaming
+     * 
+     * @since 1.28.0
+     * @access private
+     * @param string $api_key OpenAI API key
+     * @param string $assistant_id OpenAI Assistant ID
+     * @param string $message User message
+     * @param array $history Conversation history
+     * @return void
+     * @throws Exception When API request fails
+     */
+    private function handle_openai_assistant($api_key, $assistant_id, $message, $history) {
         error_log("Handling OpenAI Assistant request with message: " . $message);
         error_log("History received (" . count($history) . " messages): " . print_r($history, true));
         
@@ -714,57 +710,19 @@ class MultiLLMChatbot {
         }
     }
 
-    private function poll_openai_completion($thread_id, $run_id, $headers, $assistant_id) {
-        $base_url = "https://api.openai.com/v1/threads/{$thread_id}/runs/{$run_id}";
-        $max_attempts = 60;  // 30 seconds total with 0.5s delay
-        $attempt = 0;
-
-        while ($attempt < $max_attempts) {
-            $response = wp_remote_get($base_url, ['headers' => $headers]);
-            
-            if (is_wp_error($response)) {
-                error_log('Error checking run status: ' . $response->get_error_message());
-                echo "data: " . json_encode(['error' => 'Failed to check run status']) . "\n\n";
-                return;
-            }
-            
-            $data = json_decode(wp_remote_retrieve_body($response), true);
-            $status = $data['status'] ?? 'unknown';
-            error_log("Run status: $status");
-
-            if ($status === 'completed') {
-                // Get messages
-                $messages_url = "https://api.openai.com/v1/threads/{$thread_id}/messages";
-                $messages_response = wp_remote_get($messages_url, ['headers' => $headers]);
-                
-                if (!is_wp_error($messages_response)) {
-                    $messages_data = json_decode(wp_remote_retrieve_body($messages_response), true);
-                    if (isset($messages_data['data'][0]['content'][0]['text']['value'])) {
-                        $content = $messages_data['data'][0]['content'][0]['text']['value'];
-                        echo "data: " . json_encode(['content' => $content]) . "\n\n";
-                    }
-                }
-                break;
-            } elseif (in_array($status, ['failed', 'cancelled', 'expired'])) {
-                error_log("Run failed with status: $status");
-                echo "data: " . json_encode(['error' => "Assistant run $status"]) . "\n\n";
-                break;
-            }
-
-            if ($attempt === 0) {
-                echo "data: " . json_encode(['content' => 'Traitement en cours...']) . "\n\n";
-            }
-
-            $attempt++;
-            usleep(500000);  // 0.5 second delay
-        }
-
-        if ($attempt >= $max_attempts) {
-            error_log('Run timed out');
-            echo "data: " . json_encode(['error' => 'Assistant run timed out']) . "\n\n";
-        }
-    }
-
+    /**
+     * Handles Mistral Agent API requests
+     * Manages conversation with Mistral's agent interface
+     * 
+     * @since 1.28.0
+     * @access private
+     * @param string $api_key Mistral API key
+     * @param string $agent_id Mistral Agent ID
+     * @param string $message User message
+     * @param array $history Conversation history
+     * @return void
+     * @throws Exception When API request fails
+     */
     private function handle_mistral_agent($api_key, $agent_id, $message, $history) {
         error_log("Handling Mistral Agent request");
         
@@ -791,6 +749,154 @@ class MultiLLMChatbot {
         } catch (Exception $e) {
             error_log('Mistral Agent error: ' . $e->getMessage());
             echo "data: " . json_encode(['error' => 'Mistral Agent error: ' . $e->getMessage()]) . "\n\n";
+        }
+    }
+
+    /**
+     * Handles standard chat API requests
+     * Processes requests for all providers' standard chat APIs
+     * 
+     * @since 1.0.0
+     * @access private
+     * @param string $provider Provider identifier
+     * @param string $api_key Provider API key
+     * @param string $message User message
+     * @param string $definition System instructions
+     * @param array $history Conversation history
+     * @return void
+     * @throws Exception When API request fails
+     */
+    private function handle_chat_api_request($provider, $api_key, $message, $definition, $history) {
+        error_log("Handling standard chat request for $provider with history length: " . count($history));
+        
+        $headers = [
+            'Authorization: Bearer ' . $api_key,
+            'Content-Type: application/json'
+        ];
+
+        $messages = $this->prepare_messages($history, $message, $definition);
+
+        switch ($provider) {
+            case 'openai':
+                $url = 'https://api.openai.com/v1/chat/completions';
+                $model = get_option('chatbot_openai_model', 'gpt-4-turbo-preview');
+                $body = json_encode([
+                    'model' => $model,
+                    'messages' => $messages,
+                    'stream' => true
+                ]);
+                error_log("OpenAI request body: " . $body);
+                break;
+                
+            case 'mistral':
+                $url = 'https://api.mistral.ai/v1/chat/completions';
+                $model = get_option('chatbot_mistral_model', 'mistral-large-latest');
+                $body = json_encode([
+                    'model' => $model,
+                    'messages' => $messages,
+                    'stream' => true
+                ]);
+                error_log("Mistral request body: " . $body);
+                break;
+                
+            case 'claude':
+                $url = 'https://api.anthropic.com/v1/messages';
+                // Add Anthropic-specific headers
+                $headers = [
+                    'x-api-key: ' . $api_key,
+                    'anthropic-version: 2023-06-01',
+                    'Content-Type: application/json'
+                ];
+                $body = json_encode([
+                    'model' => 'claude-3-opus-20240229',
+                    'messages' => $messages,
+                    'stream' => true
+                ]);
+                break;
+                
+            case 'perplexity':
+                $url = 'https://api.perplexity.ai/chat/completions';
+                $body = json_encode([
+                    'model' => 'sonar-medium-online',
+                    'messages' => $messages,
+                    'stream' => true
+                ]);
+                break;
+                
+            case 'gemini':
+                $url = 'https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro-latest:generateContent';
+                // Add Gemini-specific headers
+                $headers = [
+                    'x-goog-api-key: ' . $api_key,
+                    'Content-Type: application/json'
+                ];
+                $body = json_encode([
+                    'contents' => $messages,
+                    'stream' => true
+                ]);
+                break;
+        }
+
+        $this->handle_standard_request($provider, $url, $headers, $body);
+    }
+
+    /**
+     * Polls OpenAI for completion status and streams responses
+     * Continuously checks run status and retrieves messages when complete
+     * 
+     * @since 1.28.0
+     * @access private
+     * @param string $thread_id OpenAI thread ID
+     * @param string $run_id OpenAI run ID
+     * @param array $headers Request headers
+     * @param string $assistant_id Assistant identifier
+     * @return void
+     * @throws Exception When polling fails
+     */
+    private function poll_openai_completion($thread_id, $run_id, $headers, $assistant_id) {
+        $max_attempts = 60;  // 30 seconds total with 500ms sleep
+        $attempt = 0;
+        
+        while ($attempt < $max_attempts) {
+            $status_response = wp_remote_get(
+                "https://api.openai.com/v1/threads/{$thread_id}/runs/{$run_id}",
+                ['headers' => $headers]
+            );
+            
+            if (is_wp_error($status_response)) {
+                throw new Exception('Failed to check run status: ' . $status_response->get_error_message());
+            }
+            
+            $status_data = json_decode(wp_remote_retrieve_body($status_response), true);
+            $status = $status_data['status'] ?? '';
+            
+            if ($status === 'completed') {
+                // Get messages after completion
+                $messages_response = wp_remote_get(
+                    "https://api.openai.com/v1/threads/{$thread_id}/messages",
+                    ['headers' => $headers]
+                );
+                
+                if (is_wp_error($messages_response)) {
+                    throw new Exception('Failed to retrieve messages: ' . $messages_response->get_error_message());
+                }
+                
+                $messages_data = json_decode(wp_remote_retrieve_body($messages_response), true);
+                if (isset($messages_data['data'][0]['content'][0]['text']['value'])) {
+                    $response = $messages_data['data'][0]['content'][0]['text']['value'];
+                    echo "data: " . json_encode(['content' => $response]) . "\n\n";
+                }
+                break;
+            } elseif (in_array($status, ['failed', 'cancelled', 'expired'])) {
+                throw new Exception("Run failed with status: $status");
+            }
+            
+            $attempt++;
+            usleep(500000); // Sleep for 500ms
+        }
+        
+        if ($attempt >= $max_attempts) {
+            throw new Exception('Timeout waiting for completion');
         }
     }
 
@@ -1129,7 +1235,15 @@ class MultiLLMChatbot {
         curl_close($ch);
     }
 
-    public function get_page_context() {
+    /**
+     * Gets the current page context for the chatbot
+     * Extracts and processes content from the current page
+     * 
+     * @since 1.0.0
+     * @access private
+     * @return string Processed page content
+     */
+    private function get_page_context() {
         $context = '';
         $max_length = 8000; // Keep the increased length
         
@@ -1227,7 +1341,12 @@ class MultiLLMChatbot {
     }
 
     /**
-     * Saves the list of available models for a provider
+     * Saves fetched models to WordPress options
+     * Handles AJAX request to store available models for a provider
+     * 
+     * @since 1.30.0
+     * @access public
+     * @return void
      */
     public function save_provider_models() {
         check_ajax_referer('chatbot_admin_nonce');
