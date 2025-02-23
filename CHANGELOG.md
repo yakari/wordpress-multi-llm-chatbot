@@ -2,11 +2,17 @@
 
 All notable changes to the Multi-LLM Chatbot plugin will be documented in this file.
 
-## [1.28.0] - 2025-02-20
+## [1.29.0] - 2024-02-22
 ### Added
-- Conversation history support for all providers
-- Local storage for chat persistence
-- Better message display with Markdown
+- Warning message in admin interface about Mistral Agent API's limited conversation history support
+
+### Fixed
+- Improved logging for API responses
+- Better error handling for JSON decoding
+
+## [1.28.0] - 2024-02-21
+### Added
+- Support for Mistral Agent API
 
 ### Changed
 - Improved message handling for Mistral Agent

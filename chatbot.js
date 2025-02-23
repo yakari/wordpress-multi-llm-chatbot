@@ -90,6 +90,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
     // Function to add message to history
     function addToHistory(role, content) {
+        console.log('Adding to history:', { role, content });
         conversationHistory.push({ role, content });
         // Save to localStorage
         try {
@@ -181,18 +182,6 @@ document.addEventListener("DOMContentLoaded", function () {
         // Scroll to bottom
         chatResponse.scrollTop = chatResponse.scrollHeight;
 
-        // Prepare request URL with context if enabled
-        const contextParam = (useContext && window.chatbotPageContext) 
-            ? `&context=${encodeURIComponent(window.chatbotPageContext)}` 
-            : '';
-        
-        // Add history to request
-        const historyParam = `&history=${encodeURIComponent(JSON.stringify(conversationHistory))}`;
-        
-        const nonceParam = `&_wpnonce=${chatbot_ajax.nonce}`;
-        
-        const url = `${chatbot_ajax.ajaxurl}?action=chatbot_request&message=${encodeURIComponent(message)}${contextParam}${historyParam}${nonceParam}&_=${Date.now()}`;
-
         let fullResponse = '';
         let hasReceivedResponse = false;
         let progressDots = 0;
@@ -218,8 +207,35 @@ document.addEventListener("DOMContentLoaded", function () {
             }
 
             try {
+                const url = `${chatbot_ajax.ajaxurl}`;
+                
+                const formData = new FormData();
+                formData.append('action', 'chatbot_request');
+                formData.append('message', message);
+                const previousMessages = conversationHistory.slice(0, -1);
+                console.log('Current conversation history:', conversationHistory);
+                console.log('Previous messages to send:', previousMessages);
+                formData.append('history', JSON.stringify(previousMessages));
+
+                if (useContext && window.chatbotPageContext) {
+                    formData.append('context', window.chatbotPageContext);
+                }
+                if (chatbot_ajax.nonce) {
+                    formData.append('_wpnonce', chatbot_ajax.nonce);
+                }
+
+                console.log('=== Request to WordPress ===');
+                console.log('URL:', url);
+                console.log('FormData:');
+                for (let pair of formData.entries()) {
+                    console.log(pair[0] + ': ' + pair[1]);
+                }
+                console.log('========================');
+
                 const response = await fetch(url, {
                     credentials: 'same-origin',
+                    method: 'POST',
+                    body: formData,
                     headers: {
                         'Accept': 'text/event-stream',
                         'Cache-Control': 'no-cache',
@@ -233,6 +249,8 @@ document.addEventListener("DOMContentLoaded", function () {
                 const reader = response.body.getReader();
                 const decoder = new TextDecoder();
                 let buffer = '';
+                let completeContent = '';
+                let completeServerResponse = '';
 
                 while (true) {
                     const {value, done} = await reader.read();
@@ -241,11 +259,11 @@ document.addEventListener("DOMContentLoaded", function () {
                     buffer += decoder.decode(value, {stream: true});
                     const lines = buffer.split('\n');
                     
-                    // Process all complete lines
-                    buffer = lines.pop() || ''; // Keep any incomplete line
+                    buffer = lines.pop() || '';
                     
                     for (const line of lines) {
                         if (line.startsWith('data: ')) {
+                            completeServerResponse += line + '\n';
                             const data = JSON.parse(line.slice(6));
                             if (data.error) {
                                 console.error('Server error:', data.error);
@@ -265,14 +283,24 @@ document.addEventListener("DOMContentLoaded", function () {
                                 }
                                 
                                 fullResponse += data.content;
+                                completeContent += data.content;
                                 typingSpan.innerHTML = marked.parse(fullResponse);
                                 saveChatHistory();
                                 chatResponse.scrollTop = chatResponse.scrollHeight;
-                                addToHistory('assistant', fullResponse);
                             }
                         }
                     }
                 }
+
+                console.log('=== Complete Response Content ===');
+                console.log(completeContent);
+                console.log('===============================');
+
+                // Add complete response to history only once at the end
+                if (fullResponse) {
+                    addToHistory('assistant', fullResponse);
+                }
+
             } catch (error) {
                 console.error('Request failed:', error);
                 retryCount++;

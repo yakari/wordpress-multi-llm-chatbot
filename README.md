@@ -4,17 +4,19 @@ A WordPress plugin that integrates multiple Language Learning Models (LLMs) into
 
 ## Features
 
-- Support for multiple AI providers:
-  - OpenAI (GPT-4)
-  - Anthropic (Claude)
-  - Perplexity AI
+- Support for multiple LLM providers:
+  - OpenAI (GPT-4 Turbo, both standard and Assistant API)
+  - Anthropic Claude 3
+  - Perplexity
   - Google Gemini
-  - Mistral AI
+  - Mistral (both standard and Agent API*)
+- Markdown support for rich text responses
 - Streaming responses for real-time interaction
-- Custom instructions for each provider
-- Support for OpenAI Assistants API and Mistral Agents
+- Context-aware conversations using page content
+- Conversation history support
 - Admin-only mode option
-- Markdown rendering with code syntax highlighting
+
+> *Note: The Mistral Agent API currently has limited support for conversation history. For full conversation history support, use the standard Mistral API instead.
 
 ## Installation
 
