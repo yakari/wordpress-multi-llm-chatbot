@@ -2,6 +2,25 @@
 
 All notable changes to the Multi-LLM Chatbot plugin will be documented in this file.
 
+## [1.29.0] - 2025-02-22
+### Added
+- Warning message in admin interface about Mistral Agent API's limited conversation history support
+
+### Fixed
+- Improved logging for API responses
+- Better error handling for JSON decoding
+- Added HTML escaping for user messages to prevent XSS attacks
+- Restored clear message labels for users and assistant responses
+
+## [1.28.0] - 2025-02-21
+### Added
+- Support for Mistral Agent API
+
+### Changed
+- Improved message handling for Mistral Agent
+- Enhanced history tracking across sessions
+- Better UI feedback for messages
+
 ## [1.27.0] - 2025-02-20
 ### Fixed
 - Mistral agent integration now properly uses the agents API endpoint

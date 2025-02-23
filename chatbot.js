@@ -5,6 +5,27 @@ document.addEventListener("DOMContentLoaded", function () {
     const chatInput = document.getElementById("chat-input");
     const chatResponse = document.getElementById("chat-response");
     const minimizeButton = document.getElementById("chatbot-minimize");
+    const toggleContextButton = document.getElementById("toggle-context");
+    let useContext = false;
+    let conversationHistory = [];
+
+    // Load saved history from localStorage if available
+    try {
+        const savedHistory = localStorage.getItem('chatbotHistory');
+        if (savedHistory) {
+            conversationHistory = JSON.parse(savedHistory);
+            // Render saved history
+            conversationHistory.forEach(entry => {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `message ${entry.role}`;
+                const label = entry.role === 'user' ? 'Vous' : 'Assistant';
+                messageDiv.innerHTML = `<strong>${label} :</strong> ${marked.parse(entry.content)}`;
+                chatResponse.appendChild(messageDiv);
+            });
+        }
+    } catch (e) {
+        console.error('Error loading chat history:', e);
+    }
 
     // Configure marked options
     marked.setOptions({
@@ -68,8 +89,17 @@ document.addEventListener("DOMContentLoaded", function () {
         requestAnimationFrame(update);
     }
 
-    // Load saved chat history
-    loadChatHistory();
+    // Function to add message to history
+    function addToHistory(role, content) {
+        console.log('Adding to history:', { role, content });
+        conversationHistory.push({ role, content });
+        // Save to localStorage
+        try {
+            localStorage.setItem('chatbotHistory', JSON.stringify(conversationHistory));
+        } catch (e) {
+            console.error('Error saving chat history:', e);
+        }
+    }
 
     // Function to save chat history
     function saveChatHistory() {
@@ -91,6 +121,7 @@ document.addEventListener("DOMContentLoaded", function () {
         if (confirm("Are you sure you want to clear the chat history?")) {
             chatResponse.innerHTML = '';
             localStorage.removeItem('chatbotHistory');
+            conversationHistory = [];
         }
     });
 
@@ -99,6 +130,9 @@ document.addEventListener("DOMContentLoaded", function () {
         const message = chatInput.value.trim();
         if (!message) return;
 
+        // Add user message to history and display
+        addToHistory('user', message);
+        
         // Escape HTML in user message
         const escapedMessage = message.replace(/[&<>"']/g, function(char) {
             const entities = {
@@ -110,14 +144,26 @@ document.addEventListener("DOMContentLoaded", function () {
             };
             return entities[char];
         });
-
-        chatResponse.innerHTML += `<p><strong>Vous :</strong> ${escapedMessage}</p>`;
-        chatInput.value = "";
-
-        const responseElement = document.createElement('p');
-        responseElement.innerHTML = '<strong>Assistant :</strong> <span class="typing-response">En attente de réponse...</span>';
-        chatResponse.appendChild(responseElement);
-        const typingSpan = responseElement.querySelector('.typing-response');
+        
+        // Display user message
+        const userDiv = document.createElement('div');
+        userDiv.className = 'message user';
+        userDiv.innerHTML = `<strong>Vous :</strong> ${marked.parse(escapedMessage)}`;
+        chatResponse.appendChild(userDiv);
+        
+        // Clear input
+        chatInput.value = '';
+        
+        // Create response container
+        const responseDiv = document.createElement('div');
+        responseDiv.className = 'message assistant';
+        responseDiv.innerHTML = '<strong>Assistant :</strong> ';
+        const typingSpan = document.createElement('span');
+        responseDiv.appendChild(typingSpan);
+        chatResponse.appendChild(responseDiv);
+        
+        // Scroll to bottom
+        chatResponse.scrollTop = chatResponse.scrollHeight;
 
         let fullResponse = '';
         let hasReceivedResponse = false;
@@ -143,19 +189,36 @@ document.addEventListener("DOMContentLoaded", function () {
                 return;
             }
 
-            const contextParam = window.chatbotPageContext 
-                ? `&context=${encodeURIComponent(window.chatbotPageContext)}` 
-                : '';
-            
-            const nonceParam = chatbot_ajax.nonce 
-                ? `&_wpnonce=${chatbot_ajax.nonce}` 
-                : '';
-            
-            const url = `${chatbot_ajax.ajaxurl}?action=chatbot_request&message=${encodeURIComponent(message)}${contextParam}${nonceParam}&_=${Date.now()}`;
-            
             try {
+                const url = `${chatbot_ajax.ajaxurl}`;
+                
+                const formData = new FormData();
+                formData.append('action', 'chatbot_request');
+                formData.append('message', message);
+                const previousMessages = conversationHistory.slice(0, -1);
+                console.log('Current conversation history:', conversationHistory);
+                console.log('Previous messages to send:', previousMessages);
+                formData.append('history', JSON.stringify(previousMessages));
+
+                if (useContext && window.chatbotPageContext) {
+                    formData.append('context', window.chatbotPageContext);
+                }
+                if (chatbot_ajax.nonce) {
+                    formData.append('_wpnonce', chatbot_ajax.nonce);
+                }
+
+                console.log('=== Request to WordPress ===');
+                console.log('URL:', url);
+                console.log('FormData:');
+                for (let pair of formData.entries()) {
+                    console.log(pair[0] + ': ' + pair[1]);
+                }
+                console.log('========================');
+
                 const response = await fetch(url, {
                     credentials: 'same-origin',
+                    method: 'POST',
+                    body: formData,
                     headers: {
                         'Accept': 'text/event-stream',
                         'Cache-Control': 'no-cache',
@@ -169,6 +232,8 @@ document.addEventListener("DOMContentLoaded", function () {
                 const reader = response.body.getReader();
                 const decoder = new TextDecoder();
                 let buffer = '';
+                let completeContent = '';
+                let completeServerResponse = '';
 
                 while (true) {
                     const {value, done} = await reader.read();
@@ -177,11 +242,11 @@ document.addEventListener("DOMContentLoaded", function () {
                     buffer += decoder.decode(value, {stream: true});
                     const lines = buffer.split('\n');
                     
-                    // Process all complete lines
-                    buffer = lines.pop() || ''; // Keep any incomplete line
+                    buffer = lines.pop() || '';
                     
                     for (const line of lines) {
                         if (line.startsWith('data: ')) {
+                            completeServerResponse += line + '\n';
                             const data = JSON.parse(line.slice(6));
                             if (data.error) {
                                 console.error('Server error:', data.error);
@@ -201,6 +266,7 @@ document.addEventListener("DOMContentLoaded", function () {
                                 }
                                 
                                 fullResponse += data.content;
+                                completeContent += data.content;
                                 typingSpan.innerHTML = marked.parse(fullResponse);
                                 saveChatHistory();
                                 chatResponse.scrollTop = chatResponse.scrollHeight;
@@ -208,6 +274,16 @@ document.addEventListener("DOMContentLoaded", function () {
                         }
                     }
                 }
+
+                console.log('=== Complete Response Content ===');
+                console.log(completeContent);
+                console.log('===============================');
+
+                // Add complete response to history only once at the end
+                if (fullResponse) {
+                    addToHistory('assistant', fullResponse);
+                }
+
             } catch (error) {
                 console.error('Request failed:', error);
                 retryCount++;
