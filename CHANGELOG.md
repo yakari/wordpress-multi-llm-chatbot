@@ -6,6 +6,7 @@ All notable changes to the Multi-LLM Chatbot plugin will be documented in this f
 ### Changed
 - Improved field visibility handling in admin interface
 - Better organization of model selection and assistant fields
+- Changed chatbot access control from admin-only to registered-users-only
 
 ### Fixed
 - Fixed assistant ID field visibility when switching providers

@@ -246,8 +246,9 @@ class MultiLLMChatbot {
                                        name="chatbot_visibility" 
                                        value="1" 
                                        <?php checked(get_option('chatbot_visibility'), '1'); ?>>
-                                Admin only
+                                Registered users only
                             </label>
+                            <p class="description">When checked, only logged-in users can use the chatbot. When unchecked, it's available to everyone.</p>
                         </td>
                     </tr>
                 </table>
@@ -470,7 +471,7 @@ class MultiLLMChatbot {
      */
     public function render_chatbot() {
         // Check visibility settings
-        if (get_option('chatbot_visibility') && !current_user_can('manage_options')) {
+        if (get_option('chatbot_visibility') && !is_user_logged_in()) {
             return;
         }
 
