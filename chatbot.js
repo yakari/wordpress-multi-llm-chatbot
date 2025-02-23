@@ -5,8 +5,6 @@ document.addEventListener("DOMContentLoaded", function () {
     const chatInput = document.getElementById("chat-input");
     const chatResponse = document.getElementById("chat-response");
     const minimizeButton = document.getElementById("chatbot-minimize");
-    const toggleContextButton = document.getElementById("toggle-context");
-    let useContext = false;
     let conversationHistory = [];
 
     // Load saved history from localStorage if available
@@ -200,7 +198,8 @@ document.addEventListener("DOMContentLoaded", function () {
                 console.log('Previous messages to send:', previousMessages);
                 formData.append('history', JSON.stringify(previousMessages));
 
-                if (useContext && window.chatbotPageContext) {
+                // Always use context when available
+                if (window.chatbotPageContext) {
                     formData.append('context', window.chatbotPageContext);
                 }
                 if (chatbot_ajax.nonce) {
