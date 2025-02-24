@@ -1,4 +1,14 @@
 jQuery(document).ready(function($) {
+    const debugMode = chatbotAdmin.debugMode;
+    
+    // Override console methods when debug mode is off
+    if (!debugMode) {
+        console.log = function() {};
+        console.info = function() {};
+        console.debug = function() {};
+        // Keep error and warn for critical issues
+    }
+
     // Handle provider switching for definition fields
     $('#chatbot_provider').on('change', function() {
         const selectedProvider = $(this).val();
