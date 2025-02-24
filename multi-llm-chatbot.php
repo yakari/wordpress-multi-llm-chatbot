@@ -38,7 +38,7 @@ class MultiLLMChatbot {
         add_action('wp_ajax_chatbot_request', [$this, 'handle_chat_request']);
         add_action('wp_ajax_nopriv_chatbot_request', [$this, 'handle_chat_request']);
 
-        error_log('Multi-LLM Chatbot initialized');
+        $this->log('Multi-LLM Chatbot initialized');
     }
 
     /**
@@ -54,6 +54,13 @@ class MultiLLMChatbot {
         register_setting('multi_llm_chatbot_settings', 'chatbot_provider');
         register_setting('multi_llm_chatbot_settings', 'chatbot_visibility');
         register_setting('multi_llm_chatbot_settings', 'chatbot_definition');
+        register_setting('multi_llm_chatbot_settings', 'chatbot_debug_mode', [
+            'type' => 'boolean',
+            'default' => false,
+            'sanitize_callback' => function($value) {
+                return $value ? '1' : '0';
+            }
+        ]);
         register_setting('multi_llm_chatbot_settings', 'chatbot_use_context', [
             'type' => 'boolean',
             'default' => false,
@@ -75,7 +82,7 @@ class MultiLLMChatbot {
             }
         }
 
-        error_log('Multi-LLM Chatbot settings registered');
+        $this->log('Multi-LLM Chatbot settings registered');
     }
 
     /**
@@ -103,6 +110,7 @@ class MultiLLMChatbot {
         // Add nonce for authenticated users
         $script_data = [
             'ajaxurl' => admin_url('admin-ajax.php'),
+            'debugMode' => get_option('chatbot_debug_mode') === '1',
         ];
         
         if (is_user_logged_in()) {
@@ -111,7 +119,7 @@ class MultiLLMChatbot {
         
         wp_localize_script('chatbot-script', 'chatbot_ajax', $script_data);
 
-        error_log('Multi-LLM Chatbot frontend scripts enqueued');
+        $this->log('Multi-LLM Chatbot frontend scripts enqueued');
     }
 
     /**
@@ -139,10 +147,11 @@ class MultiLLMChatbot {
 
         wp_localize_script('chatbot-admin', 'chatbotAdmin', [
             'ajaxurl' => admin_url('admin-ajax.php'),
-            'nonce' => wp_create_nonce('chatbot_admin_nonce')
+            'nonce' => wp_create_nonce('chatbot_admin_nonce'),
+            'debugMode' => get_option('chatbot_debug_mode') === '1'
         ]);
 
-        error_log('Multi-LLM Chatbot admin scripts enqueued');
+        $this->log('Multi-LLM Chatbot admin scripts enqueued');
     }
 
     /**
@@ -164,7 +173,7 @@ class MultiLLMChatbot {
             100
         );
 
-        error_log('Admin page created');
+        $this->log('Admin page created');
     }
 
     /**
@@ -176,7 +185,7 @@ class MultiLLMChatbot {
      * @return void
      */
     public function admin_page_content() {
-        error_log('Rendering admin page content');
+        $this->log('Rendering admin page content');
         ?>
         <div class="wrap">
             <h1>Multi-LLM Chatbot Settings</h1>
@@ -186,7 +195,7 @@ class MultiLLMChatbot {
                 do_settings_sections('multi_llm_chatbot_settings');
                 
                 $current_provider = get_option('chatbot_provider', 'openai');
-                error_log('Current provider: ' . $current_provider);
+                $this->log('Current provider: ' . $current_provider);
                 ?>
                 
                 <table class="form-table">
@@ -251,13 +260,28 @@ class MultiLLMChatbot {
                             <p class="description">When checked, only logged-in users can use the chatbot. When unchecked, it's available to everyone.</p>
                         </td>
                     </tr>
+
+                    <!-- Debug Mode Setting -->
+                    <tr>
+                        <th scope="row">Debug Mode</th>
+                        <td>
+                            <label>
+                                <input type="checkbox" 
+                                       name="chatbot_debug_mode" 
+                                       value="1" 
+                                       <?php checked(get_option('chatbot_debug_mode'), '1'); ?>>
+                                Enable debug logging
+                            </label>
+                            <p class="description">When checked, enables detailed logging in browser console and WordPress debug.log. Use only for troubleshooting.</p>
+                        </td>
+                    </tr>
                 </table>
 
                 <?php submit_button(); ?>
             </form>
         </div>
         <?php
-        error_log('Admin page content rendered');
+        $this->log('Admin page content rendered');
     }
 
     /**
@@ -272,7 +296,7 @@ class MultiLLMChatbot {
      * @return void
      */
     private function render_provider_fields($provider_key, $provider_name, $current_provider) {
-        error_log("Rendering fields for provider: $provider_key");
+        $this->log("Rendering fields for provider: $provider_key");
         
         // API Key field
         $api_key = get_option("chatbot_{$provider_key}_api_key", '');
@@ -300,7 +324,7 @@ class MultiLLMChatbot {
      * @return void
      */
     private function render_api_key_field($provider_key, $provider_name, $current_provider, $api_key) {
-        error_log("Rendering API key field for: $provider_key");
+        $this->log("Rendering API key field for: $provider_key");
         ?>
         <tr class="api-key-field" data-provider="<?php echo esc_attr($provider_key); ?>"
             style="<?php echo $current_provider === $provider_key ? '' : 'display: none;'; ?>">
@@ -383,7 +407,7 @@ class MultiLLMChatbot {
      * @return void
      */
     private function render_assistant_fields($provider_key, $provider_name, $current_provider) {
-        error_log("Rendering assistant fields for: $provider_key");
+        $this->log("Rendering assistant fields for: $provider_key");
         $assistant_id = get_option("chatbot_{$provider_key}_assistant_id", '');
         $use_assistant = get_option("chatbot_{$provider_key}_use_assistant", '');
         ?>
@@ -437,7 +461,7 @@ class MultiLLMChatbot {
      * @return void
      */
     private function render_definition_field($current_provider) {
-        error_log("Rendering definition field");
+        $this->log("Rendering definition field");
         $definition = get_option("chatbot_definition", '');
         $use_assistant = get_option("chatbot_{$current_provider}_use_assistant", '');
         ?>
@@ -526,17 +550,17 @@ class MultiLLMChatbot {
             // Get message and check API key
             $message = sanitize_text_field($_POST['message'] ?? '');
             $raw_history = stripslashes($_POST['history'] ?? '[]');  // Remove escaped slashes
-            error_log("Raw history received: " . $raw_history);
+            $this->log("Raw history received: " . $raw_history);
             $history = json_decode($raw_history, true);
             if (json_last_error() !== JSON_ERROR_NONE) {
-                error_log("JSON decode error: " . json_last_error_msg());
+                $this->log("JSON decode error: " . json_last_error_msg());
                 $history = [];
             }
             
-            error_log("Received request with history (" . count($history) . " messages): " . print_r($history, true));
+            $this->log("Received request with history (" . count($history) . " messages): " . print_r($history, true));
             
             if (empty($message)) {
-                error_log('Error: Empty message received');
+                $this->log('Error: Empty message received');
                 echo "data: " . json_encode(['error' => 'Message required']) . "\n\n";
                 return;
             }
@@ -549,7 +573,7 @@ class MultiLLMChatbot {
             
             $api_key = get_option("chatbot_{$provider}_api_key");
             if (empty($api_key)) {
-                error_log('Error: No API key configured');
+                $this->log('Error: No API key configured');
                 echo "data: " . json_encode(['error' => 'API key required']) . "\n\n";
                 return;
             }
@@ -562,17 +586,17 @@ class MultiLLMChatbot {
 
             // Route to appropriate handler
             if ($provider === 'openai' && $use_assistant && !empty($assistant_id)) {
-                error_log("Using OpenAI Assistant API");
+                $this->log("Using OpenAI Assistant API");
                 $this->handle_openai_assistant($api_key, $assistant_id, $context_message, $history);
             } else if ($provider === 'mistral' && $use_assistant && !empty($assistant_id)) {
-                error_log("Using Mistral Agent API");
+                $this->log("Using Mistral Agent API");
                 $this->handle_mistral_agent($api_key, $assistant_id, $context_message, $history);
             } else {
-                error_log("Using standard chat API for $provider");
+                $this->log("Using standard chat API for $provider");
                 $this->handle_chat_api_request($provider, $api_key, $context_message, $definition, $history);
             }
         } catch (Exception $e) {
-            error_log('Error: ' . $e->getMessage());
+            $this->log('Error: ' . $e->getMessage(), 'error');
             echo "data: " . json_encode(['error' => 'Server error']) . "\n\n";
         }
     }
@@ -591,14 +615,14 @@ class MultiLLMChatbot {
     private function prepare_messages($history, $message, $definition = '') {
         $messages = [];
         
-        error_log("Preparing messages with:");
-        error_log("- History (" . count($history) . " messages): " . print_r($history, true));
-        error_log("- Current message: " . $message);
-        error_log("- Definition present: " . (!empty($definition) ? 'yes' : 'no'));
+        $this->log("Preparing messages with:");
+        $this->log("- History (" . count($history) . " messages): " . print_r($history, true));
+        $this->log("- Current message: " . $message);
+        $this->log("- Definition present: " . (!empty($definition) ? 'yes' : 'no'));
         
         // Add system message if definition exists
         if (!empty($definition)) {
-            error_log("Adding system message with definition");
+            $this->log("Adding system message with definition");
             $messages[] = ['role' => 'system', 'content' => $definition];
         }
         
@@ -616,7 +640,7 @@ class MultiLLMChatbot {
         // Add current message
         $messages[] = ['role' => 'user', 'content' => $message];
         
-        error_log("Final messages array (" . count($messages) . " messages): " . print_r($messages, true));
+        $this->log("Final messages array (" . count($messages) . " messages): " . print_r($messages, true));
         
         return $messages;
     }
@@ -635,8 +659,8 @@ class MultiLLMChatbot {
      * @throws Exception When API request fails
      */
     private function handle_openai_assistant($api_key, $assistant_id, $message, $history) {
-        error_log("Handling OpenAI Assistant request with message: " . $message);
-        error_log("History received (" . count($history) . " messages): " . print_r($history, true));
+        $this->log("Handling OpenAI Assistant request with message: " . $message);
+        $this->log("History received (" . count($history) . " messages): " . print_r($history, true));
         
         $headers = [
             'Authorization' => 'Bearer ' . $api_key,
@@ -658,11 +682,11 @@ class MultiLLMChatbot {
             
             $thread_data = json_decode(wp_remote_retrieve_body($thread_response), true);
             if (!isset($thread_data['id'])) {
-                error_log('Thread creation response: ' . print_r($thread_data, true));
+                $this->log('Thread creation response: ' . print_r($thread_data, true));
                 throw new Exception('Invalid thread creation response');
             }
             $thread_id = $thread_data['id'];
-            error_log("Created thread: $thread_id");
+            $this->log("Created thread: $thread_id");
 
             // Add messages to thread
             $messages = $this->prepare_messages($history, $message);
@@ -696,17 +720,17 @@ class MultiLLMChatbot {
 
             $run_data = json_decode(wp_remote_retrieve_body($run_response), true);
             if (!isset($run_data['id'])) {
-                error_log('Run creation response: ' . print_r($run_data, true));
+                $this->log('Run creation response: ' . print_r($run_data, true));
                 throw new Exception('Invalid run creation response');
             }
             $run_id = $run_data['id'];
-            error_log("Created run: $run_id");
+            $this->log("Created run: $run_id");
             
             // Poll for completion and stream messages
             $this->poll_openai_completion($thread_id, $run_id, $headers, $assistant_id);
             
         } catch (Exception $e) {
-            error_log('OpenAI Assistant error: ' . $e->getMessage());
+            $this->log('OpenAI Assistant error: ' . $e->getMessage(), 'error');
             echo "data: " . json_encode(['error' => 'OpenAI Assistant error: ' . $e->getMessage()]) . "\n\n";
         }
     }
@@ -725,7 +749,7 @@ class MultiLLMChatbot {
      * @throws Exception When API request fails
      */
     private function handle_mistral_agent($api_key, $agent_id, $message, $history) {
-        error_log("Handling Mistral Agent request");
+        $this->log("Handling Mistral Agent request");
         
         $headers = [
             'Authorization: Bearer ' . $api_key,
@@ -743,12 +767,12 @@ class MultiLLMChatbot {
             'max_tokens' => 1000
         ], JSON_UNESCAPED_SLASHES);
         
-        error_log("Mistral Agent request body: " . $body);
+        $this->log("Mistral Agent request body: " . $body);
         
         try {
             $this->handle_standard_request('mistral', $url, $headers, $body);
         } catch (Exception $e) {
-            error_log('Mistral Agent error: ' . $e->getMessage());
+            $this->log('Mistral Agent error: ' . $e->getMessage(), 'error');
             echo "data: " . json_encode(['error' => 'Mistral Agent error: ' . $e->getMessage()]) . "\n\n";
         }
     }
@@ -768,7 +792,7 @@ class MultiLLMChatbot {
      * @throws Exception When API request fails
      */
     private function handle_chat_api_request($provider, $api_key, $message, $definition, $history) {
-        error_log("Handling standard chat request for $provider with history length: " . count($history));
+        $this->log("Handling standard chat request for $provider with history length: " . count($history));
         
         $headers = [
             'Authorization: Bearer ' . $api_key,
@@ -786,7 +810,7 @@ class MultiLLMChatbot {
                     'messages' => $messages,
                     'stream' => true
                 ]);
-                error_log("OpenAI request body: " . $body);
+                $this->log("OpenAI request body: " . $body);
                 break;
                 
             case 'mistral':
@@ -797,7 +821,7 @@ class MultiLLMChatbot {
                     'messages' => $messages,
                     'stream' => true
                 ]);
-                error_log("Mistral request body: " . $body);
+                $this->log("Mistral request body: " . $body);
                 break;
                 
             case 'claude':
@@ -936,7 +960,7 @@ class MultiLLMChatbot {
                         flush();
                     }
                 } catch (Exception $e) {
-                    error_log('Error parsing JSON: ' . $e->getMessage());
+                    $this->log('Error parsing JSON: ' . $e->getMessage(), 'error');
                 }
             }
         }
@@ -978,8 +1002,8 @@ class MultiLLMChatbot {
                     return null;
             }
         } catch (Exception $e) {
-            error_log("Error extracting content for $provider: " . $e->getMessage());
-            error_log("Decoded data: " . print_r($decoded, true));
+            $this->log("Error extracting content for $provider: " . $e->getMessage(), 'error');
+            $this->log("Decoded data: " . print_r($decoded, true), 'error');
             return null;
         }
     }
@@ -994,8 +1018,9 @@ class MultiLLMChatbot {
      */
     private function handle_curl_error($ch) {
         if (curl_errno($ch)) {
-            error_log('Curl error: ' . curl_error($ch));
-            echo "data: " . json_encode(['error' => 'Erreur lors de la requête API']) . "\n\n";
+            $error = curl_error($ch);
+            $this->log("Curl error: $error");
+            echo "data: " . json_encode(['error' => "API request failed: $error"]) . "\n\n";
         }
     }
 
@@ -1063,7 +1088,7 @@ class MultiLLMChatbot {
      * @return string|false   Thread ID if successful, false otherwise
      */
     private function create_openai_thread($base_url, $headers) {
-        error_log('Creating new OpenAI thread');
+        $this->log('Creating new OpenAI thread');
         
         $response = wp_remote_post($base_url . 'threads', [
             'headers' => $this->format_headers_for_wp($headers),
@@ -1072,7 +1097,7 @@ class MultiLLMChatbot {
         ]);
 
         if (is_wp_error($response)) {
-            error_log('Thread creation failed: ' . $response->get_error_message());
+            $this->log('Thread creation failed: ' . $response->get_error_message(), 'error');
             return false;
         }
 
@@ -1080,9 +1105,9 @@ class MultiLLMChatbot {
         $thread_id = $data['id'] ?? false;
 
         if ($thread_id) {
-            error_log("Thread created successfully: $thread_id");
+            $this->log("Thread created successfully: $thread_id");
         } else {
-            error_log('Thread creation failed: No ID in response');
+            $this->log('Thread creation failed: No ID in response', 'error');
         }
 
         return $thread_id;
@@ -1098,7 +1123,7 @@ class MultiLLMChatbot {
      * @return WP_Error|array  Response data or error
      */
     private function add_message_to_thread($base_url, $headers, $thread_id, $message) {
-        error_log("Adding message to thread: $thread_id");
+        $this->log("Adding message to thread: $thread_id");
         
         $response = wp_remote_post($base_url . "threads/$thread_id/messages", [
             'headers' => $this->format_headers_for_wp($headers),
@@ -1110,12 +1135,12 @@ class MultiLLMChatbot {
         ]);
 
         if (is_wp_error($response)) {
-            error_log('Failed to add message: ' . $response->get_error_message());
+            $this->log('Failed to add message: ' . $response->get_error_message(), 'error');
             return $response;
         }
 
         $data = json_decode(wp_remote_retrieve_body($response), true);
-        error_log('Message added successfully');
+        $this->log('Message added successfully');
         return $data;
     }
 
@@ -1130,7 +1155,7 @@ class MultiLLMChatbot {
      * @return string|false       Run ID if successful, false otherwise
      */
     private function start_assistant_run($base_url, $headers, $thread_id, $assistant_id) {
-        error_log("Starting assistant run with ID: $assistant_id");
+        $this->log("Starting assistant run with ID: $assistant_id");
         
         $response = wp_remote_post($base_url . "threads/$thread_id/runs", [
             'headers' => $this->format_headers_for_wp($headers),
@@ -1141,7 +1166,7 @@ class MultiLLMChatbot {
         ]);
 
         if (is_wp_error($response)) {
-            error_log('Failed to start run: ' . $response->get_error_message());
+            $this->log('Failed to start run: ' . $response->get_error_message(), 'error');
             return false;
         }
 
@@ -1149,10 +1174,10 @@ class MultiLLMChatbot {
         $run_id = $data['id'] ?? false;
 
         if ($run_id) {
-            error_log("Run started successfully: $run_id");
+            $this->log("Run started successfully: $run_id");
         } else {
-            error_log('Run start failed: No ID in response');
-            error_log('Response body: ' . wp_remote_retrieve_body($response));  // Add response logging
+            $this->log('Run start failed: No ID in response', 'error');
+            $this->log('Response body: ' . wp_remote_retrieve_body($response), 'error');  // Add response logging
         }
 
         return $run_id;
@@ -1166,7 +1191,7 @@ class MultiLLMChatbot {
      * @return array        WordPress-compatible headers
      */
     private function format_headers_for_wp($headers) {
-        error_log('Formatting headers for WordPress HTTP API');
+        $this->log('Formatting headers for WordPress HTTP API');
         $wp_headers = [];
         foreach ($headers as $header) {
             list($key, $value) = explode(': ', $header);
@@ -1185,11 +1210,11 @@ class MultiLLMChatbot {
      * @param string $body    Request body
      */
     private function handle_standard_request($provider, $url, $headers, $body) {
-        error_log("=== API Request ===");
-        error_log("URL: $url");
-        error_log("Headers: " . print_r($headers, true));
-        error_log("Body: " . $body);
-        error_log("================");
+        $this->log("=== API Request ===");
+        $this->log("URL: $url");
+        $this->log("Headers: " . print_r($headers, true));
+        $this->log("Body: " . $body);
+        $this->log("================");
         
         $complete_content = '';
         $ch = curl_init($url);
@@ -1217,19 +1242,19 @@ class MultiLLMChatbot {
         
         if (curl_errno($ch)) {
             $error = curl_error($ch);
-            error_log("Curl error in standard request: $error");
-            error_log("Curl info: " . print_r(curl_getinfo($ch), true));
+            $this->log("Curl error in standard request: $error");
+            $this->log("Curl info: " . print_r(curl_getinfo($ch), true));
             echo "data: " . json_encode(['error' => "API request failed: $error"]) . "\n\n";
         } else {
-            error_log("=== Complete Response Content ===");
-            error_log($complete_content);
-            error_log("==============================");
+            $this->log("=== Complete Response Content ===");
+            $this->log($complete_content);
+            $this->log("==============================");
         }
         
         $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         if ($http_code !== 200) {
-            error_log("HTTP error in standard request: $http_code");
-            error_log("Response: " . $result);
+            $this->log("HTTP error in standard request: $http_code");
+            $this->log("Response: " . $result);
             echo "data: " . json_encode(['error' => "API returned error: $http_code"]) . "\n\n";
         }
         
@@ -1287,11 +1312,11 @@ class MultiLLMChatbot {
                 // Get content based on editor type
                 $content = '';
                 if (did_action('elementor/loaded') && \Elementor\Plugin::$instance->documents->get($post->ID)->is_built_with_elementor()) {
-                    error_log('Getting Elementor content');
+                    $this->log('Getting Elementor content');
                     $elementor_content = \Elementor\Plugin::$instance->frontend->get_builder_content($post->ID, true);
                     $content = wp_strip_all_tags($elementor_content);
                 } else {
-                    error_log('Getting standard content');
+                    $this->log('Getting standard content');
                     $content = wp_strip_all_tags($post->post_content);
                 }
                 
@@ -1303,7 +1328,7 @@ class MultiLLMChatbot {
                 $context .= "Content:\n" . $content . "\n\n";
                 
                 // Log content length before truncation
-                error_log('Content length before truncation: ' . strlen($context));
+                $this->log('Content length before truncation: ' . strlen($context));
                 
                 // Smarter length limiting while preserving complete sentences
                 if (strlen($context) > $max_length) {
@@ -1334,7 +1359,7 @@ class MultiLLMChatbot {
                     $context .= "\n\n[Content truncated for length...]";
                 }
                 
-                error_log('Final context length: ' . strlen($context));
+                $this->log('Final context length: ' . strlen($context));
             }
         }
         
@@ -1365,6 +1390,21 @@ class MultiLLMChatbot {
         
         update_option("chatbot_{$provider}_available_models", $models);
         wp_send_json_success();
+    }
+
+    /**
+     * Custom logging function that respects debug mode setting
+     * 
+     * @since 1.31.0
+     * @access private
+     * @param string $message Message to log
+     * @param string $level Log level (error, info)
+     * @return void
+     */
+    private function log($message, $level = 'info') {
+        if ($level === 'error' || get_option('chatbot_debug_mode') === '1') {
+            error_log("Multi-LLM Chatbot - $level: $message");
+        }
     }
 }
 

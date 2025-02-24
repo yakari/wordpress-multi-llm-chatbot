@@ -7,6 +7,16 @@ document.addEventListener("DOMContentLoaded", function () {
     const minimizeButton = document.getElementById("chatbot-minimize");
     let conversationHistory = [];
 
+    const debugMode = chatbot_ajax.debugMode;
+    
+    // Override console methods when debug mode is off
+    if (!debugMode) {
+        console.log = function() {};
+        console.info = function() {};
+        console.debug = function() {};
+        // Keep error and warn for critical issues
+    }
+
     // Load saved history from localStorage if available
     try {
         const savedHistory = localStorage.getItem('chatbotHistory');
