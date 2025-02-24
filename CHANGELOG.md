@@ -2,7 +2,19 @@
 
 All notable changes to the Multi-LLM Chatbot plugin will be documented in this file.
 
-## [1.31.0] - 2025-02-22
+## [1.32.0] - 2024-02-24
+### Changed
+- Fixed pricing calculations to use per 1M tokens instead of per 1K tokens
+- Added detailed cost comparison in debug logs
+- Removed request body logging from debug output
+- Updated Mistral model names (mistral-nemo -> open-mistral-nemo)
+
+## [1.31.0] - 2024-02-23
+### Added
+- Cost tracking and logging functionality
+- Debug mode toggle in admin settings
+- System prompt token counting in cost calculations
+
 ### Changed
 - Improved field visibility handling in admin interface
 - Better organization of model selection and assistant fields

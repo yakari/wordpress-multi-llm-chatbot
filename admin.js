@@ -121,16 +121,36 @@ jQuery(document).ready(function($) {
         
         // OpenAI pricing per 1K tokens
         const openaiPricing = {
+            // Latest GPT-4 and variants
+            'gpt-4o': { input: 2.50, output: 10.00 },
+            'gpt-4o-mini': { input: 0.15, output: 0.60 },
+            'o1': { input: 15.00, output: 60.00 },
+            'o1-mini': { input: 1.10, output: 4.40 },
+            'o3-mini': { input: 1.10, output: 4.40 },
+            
+            // Legacy models
             'gpt-4-turbo-preview': { input: 0.01, output: 0.03 },
             'gpt-4': { input: 0.03, output: 0.06 },
-            'gpt-3.5-turbo': { input: 0.0005, output: 0.0015 }
+            'gpt-4-32k': { input: 0.06, output: 0.12 },
+            'gpt-3.5-turbo': { input: 0.0005, output: 0.0015 },
+            'gpt-3.5-turbo-16k': { input: 0.003, output: 0.004 }
         };
         
         // Mistral pricing per 1K tokens
         const mistralPricing = {
-            'mistral-large-latest': { input: 0.025, output: 0.075 },
-            'mistral-medium': { input: 0.006, output: 0.018 },
-            'mistral-small': { input: 0.0014, output: 0.0042 }
+            // Premier models
+            'mistral-large-latest': { input: 2.0, output: 6.0 },
+            'mistral-small-latest': { input: 0.1, output: 0.3 },
+            'mistral-embed': { input: 0.1, output: 0 },
+            'mistral-saba': { input: 0.2, output: 0.6 },
+            'codestral': { input: 0.3, output: 0.9 },
+            'ministral-8b': { input: 0.1, output: 0.1 },
+            'ministral-3b': { input: 0.04, output: 0.04 },
+            
+            // Free/Open models
+            'open-mistral-nemo': { input: 0.15, output: 0.15 },
+            'open-mistral-7b': { input: 0.25, output: 0.25 },
+            'open-mixtral-8x7b': { input: 0.7, output: 0.7 }
         };
         
         const modelPricing = providerId === 'openai' ? openaiPricing : mistralPricing;
@@ -157,27 +177,43 @@ jQuery(document).ready(function($) {
                 // Create a map of all models for saving
                 let allModels = {};
                 
-                // Add known models with pricing first
+                // First, get existing models from the database
+                const existingModels = chatbotAdmin.savedModels?.[providerId] || {};
+                
+                // Add known models with pricing first, updating any existing entries
                 Object.entries(modelPricing).forEach(([modelId, pricing]) => {
-                    allModels[modelId] = pricing;
+                    // Merge with existing model data if it exists, otherwise use new pricing
+                    allModels[modelId] = {
+                        ...existingModels[modelId],  // Keep any existing data
+                        input: pricing.input,        // Update with new pricing
+                        output: pricing.output
+                    };
                     select.append(new Option(
                         `${modelId} (${pricing.input}¢ / ${pricing.output}¢ per 1K tokens)`,
                         modelId
                     ));
                 });
                 
-                // Then add any other models without pricing
+                // Then add any other models from API response, preserving existing pricing if available
                 const chatModels = response.data
                     .filter(model => providerId === 'openai' ? model.id.includes('gpt') : model.id.includes('mistral'))
                     .filter(model => !modelPricing[model.id])
                     .sort((a, b) => b.id.localeCompare(a.id));
                 
                 chatModels.forEach(model => {
-                    allModels[model.id] = null; // No pricing info
-                    select.append(new Option(model.id, model.id));
+                    // Keep existing pricing if available, otherwise null
+                    allModels[model.id] = existingModels[model.id] || null;
+                    
+                    // Display with pricing if available
+                    const pricing = existingModels[model.id];
+                    const label = pricing 
+                        ? `${model.id} (${pricing.input}¢ / ${pricing.output}¢ per 1K tokens)`
+                        : model.id;
+                    
+                    select.append(new Option(label, model.id));
                 });
                 
-                // Save all models to WordPress options
+                // Save updated models to WordPress options
                 $.post(ajaxurl, {
                     action: 'save_provider_models',
                     provider: providerId,
@@ -185,7 +221,7 @@ jQuery(document).ready(function($) {
                     _wpnonce: chatbotAdmin.nonce
                 });
                 
-                // Restore previous selection if it exists in the new options
+                // Restore previous selection if it exists
                 if (currentValue && select.find(`option[value="${currentValue}"]`).length) {
                     select.val(currentValue);
                 }

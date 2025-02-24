@@ -3,7 +3,7 @@
  * Plugin Name: Multi-LLM Chatbot
  * Plugin URI: https://github.com/yakari/wordpress-multi-llm-chatbot
  * Description: Plugin WordPress pour intégrer un chatbot compatible avec OpenAI, Claude, Perplexity, Google Gemini et Mistral.
- * Version: 1.31.0
+ * Version: 1.32.0
  * Author: Yann Poirier <yakari@yakablog.info>
  * Author URI: https://foliesenbaie.fr
  * License: Apache-2.0
@@ -37,6 +37,8 @@ class MultiLLMChatbot {
         // AJAX handlers
         add_action('wp_ajax_chatbot_request', [$this, 'handle_chat_request']);
         add_action('wp_ajax_nopriv_chatbot_request', [$this, 'handle_chat_request']);
+        add_action('wp_ajax_chatbot_log_cost', [$this, 'handle_cost_logging']);
+        add_action('wp_ajax_nopriv_chatbot_log_cost', [$this, 'handle_cost_logging']);
 
         $this->log('Multi-LLM Chatbot initialized');
     }
@@ -107,15 +109,33 @@ class MultiLLMChatbot {
             true
         );
         
-        // Add nonce for authenticated users
+        // Get saved models with pricing from database
+        $openai_models = get_option('chatbot_openai_models', [
+            // Default OpenAI models if none saved
+            'gpt-4-turbo-preview' => ['input' => 0.01, 'output' => 0.03],
+            'gpt-4' => ['input' => 0.03, 'output' => 0.06],
+            'gpt-3.5-turbo' => ['input' => 0.0005, 'output' => 0.0015]
+        ]);
+        
+        $mistral_models = get_option('chatbot_mistral_models', [
+            // Default Mistral models if none saved
+            'mistral-large-latest' => ['input' => 2.0, 'output' => 6.0],
+            'mistral-medium' => ['input' => 0.6, 'output' => 1.8],
+            'mistral-small' => ['input' => 0.14, 'output' => 0.42]
+        ]);
+
         $script_data = [
             'ajaxurl' => admin_url('admin-ajax.php'),
             'debugMode' => get_option('chatbot_debug_mode') === '1',
+            'modelPricing' => [
+                'openai' => $openai_models,
+                'mistral' => $mistral_models
+            ],
+            'currentProvider' => get_option('chatbot_provider', 'openai'),
+            'currentModel' => get_option('chatbot_' . get_option('chatbot_provider', 'openai') . '_model', 'gpt-4-turbo-preview'),
+            'systemPrompt' => get_option('chatbot_definition', ''),
+            'nonce' => wp_create_nonce('wp_rest')
         ];
-        
-        if (is_user_logged_in()) {
-            $script_data['nonce'] = wp_create_nonce('wp_rest');
-        }
         
         wp_localize_script('chatbot-script', 'chatbot_ajax', $script_data);
 
@@ -145,11 +165,17 @@ class MultiLLMChatbot {
             true
         );
 
-        wp_localize_script('chatbot-admin', 'chatbotAdmin', [
+        $saved_models = array(
+            'openai' => get_option('chatbot_openai_models', array()),
+            'mistral' => get_option('chatbot_mistral_models', array())
+        );
+
+        wp_localize_script('chatbot-admin', 'chatbotAdmin', array(
             'ajaxurl' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce('chatbot_admin_nonce'),
-            'debugMode' => get_option('chatbot_debug_mode') === '1'
-        ]);
+            'debugMode' => defined('WP_DEBUG') && WP_DEBUG,
+            'savedModels' => $saved_models
+        ));
 
         $this->log('Multi-LLM Chatbot admin scripts enqueued');
     }
@@ -540,6 +566,12 @@ class MultiLLMChatbot {
      */
     public function handle_chat_request() {
         try {
+            // Get provider and model information at the start
+            $provider = get_option('chatbot_provider', 'openai');
+            $model = get_option("chatbot_{$provider}_model", 'gpt-4-turbo-preview');
+            
+            $this->log("Using provider: $provider with model: $model");
+
             // Set common headers for streaming
             header('Access-Control-Allow-Origin: ' . get_site_url());
             header('Access-Control-Allow-Credentials: true');
@@ -566,7 +598,6 @@ class MultiLLMChatbot {
             }
 
             // Get provider and API configuration
-            $provider = get_option('chatbot_provider', 'openai');
             $use_assistant = get_option("chatbot_{$provider}_use_assistant", false);
             $assistant_id = get_option("chatbot_{$provider}_assistant_id");
             $definition = get_option("chatbot_definition", '');
@@ -616,13 +647,13 @@ class MultiLLMChatbot {
         $messages = [];
         
         $this->log("Preparing messages with:");
-        $this->log("- History (" . count($history) . " messages): " . print_r($history, true));
-        $this->log("- Current message: " . $message);
+        $this->log("- History count: " . count($history));
+        $this->log("- Current message length: " . strlen($message));
         $this->log("- Definition present: " . (!empty($definition) ? 'yes' : 'no'));
         
         // Add system message if definition exists
         if (!empty($definition)) {
-            $this->log("Adding system message with definition");
+            $this->log("Adding system message (length: " . strlen($definition) . ")");
             $messages[] = ['role' => 'system', 'content' => $definition];
         }
         
@@ -640,7 +671,7 @@ class MultiLLMChatbot {
         // Add current message
         $messages[] = ['role' => 'user', 'content' => $message];
         
-        $this->log("Final messages array (" . count($messages) . " messages): " . print_r($messages, true));
+        $this->log("Final messages array count: " . count($messages));
         
         return $messages;
     }
@@ -767,8 +798,6 @@ class MultiLLMChatbot {
             'max_tokens' => 1000
         ], JSON_UNESCAPED_SLASHES);
         
-        $this->log("Mistral Agent request body: " . $body);
-        
         try {
             $this->handle_standard_request('mistral', $url, $headers, $body);
         } catch (Exception $e) {
@@ -810,7 +839,6 @@ class MultiLLMChatbot {
                     'messages' => $messages,
                     'stream' => true
                 ]);
-                $this->log("OpenAI request body: " . $body);
                 break;
                 
             case 'mistral':
@@ -821,7 +849,6 @@ class MultiLLMChatbot {
                     'messages' => $messages,
                     'stream' => true
                 ]);
-                $this->log("Mistral request body: " . $body);
                 break;
                 
             case 'claude':
@@ -879,6 +906,10 @@ class MultiLLMChatbot {
      * @throws Exception When polling fails
      */
     private function poll_openai_completion($thread_id, $run_id, $headers, $assistant_id) {
+        // Get the model at the start
+        $provider = 'openai';
+        $model = get_option("chatbot_{$provider}_model");
+        
         $max_attempts = 60;  // 30 seconds total with 500ms sleep
         $attempt = 0;
         
@@ -909,7 +940,14 @@ class MultiLLMChatbot {
                 $messages_data = json_decode(wp_remote_retrieve_body($messages_response), true);
                 if (isset($messages_data['data'][0]['content'][0]['text']['value'])) {
                     $response = $messages_data['data'][0]['content'][0]['text']['value'];
-                    echo "data: " . json_encode(['content' => $response]) . "\n\n";
+                    echo "data: " . json_encode([
+                        'content' => $response,
+                        'metadata' => [
+                            'provider' => $provider,
+                            'model' => $model,
+                            'cost_tracking' => true
+                        ]
+                    ]) . "\n\n";
                 }
                 break;
             } elseif (in_array($status, ['failed', 'cancelled', 'expired'])) {
@@ -942,6 +980,9 @@ class MultiLLMChatbot {
      * @return int               Length of processed data (required for curl callback)
      */
     private function handle_streaming_response($data, $provider) {
+        // Get the current model at the start of the function
+        $model = get_option("chatbot_{$provider}_model");
+        
         $lines = explode("\n", $data);
         foreach ($lines as $line) {
             if (strlen(trim($line)) === 0) continue;
@@ -953,7 +994,14 @@ class MultiLLMChatbot {
                     $decoded = json_decode($jsonData, true);
                     $content = $this->extract_streaming_content($decoded, $provider);
                     if ($content !== null) {
-                        echo "data: " . json_encode(['content' => $content]) . "\n\n";
+                        echo "data: " . json_encode([
+                            'content' => $content,
+                            'metadata' => [
+                                'provider' => $provider,
+                                'model' => $model,
+                                'cost_tracking' => true
+                            ]
+                        ]) . "\n\n";
                         if (ob_get_level() > 0) {
                             ob_flush();
                         }
@@ -1210,10 +1258,9 @@ class MultiLLMChatbot {
      * @param string $body    Request body
      */
     private function handle_standard_request($provider, $url, $headers, $body) {
+        // Remove body logging
         $this->log("=== API Request ===");
         $this->log("URL: $url");
-        $this->log("Headers: " . print_r($headers, true));
-        $this->log("Body: " . $body);
         $this->log("================");
         
         $complete_content = '';
@@ -1388,7 +1435,8 @@ class MultiLLMChatbot {
             wp_send_json_error('Invalid models data');
         }
         
-        update_option("chatbot_{$provider}_available_models", $models);
+        // Save models with their pricing to the database
+        update_option("chatbot_{$provider}_models", $models);
         wp_send_json_success();
     }
 
@@ -1399,12 +1447,104 @@ class MultiLLMChatbot {
      * @access private
      * @param string $message Message to log
      * @param string $level Log level (error, info)
+     * @param array $cost_data Cost data for logging
      * @return void
      */
-    private function log($message, $level = 'info') {
+    private function log($message, $level = 'info', $cost_data = null) {
         if ($level === 'error' || get_option('chatbot_debug_mode') === '1') {
-            error_log("Multi-LLM Chatbot - $level: $message");
+            if ($cost_data) {
+                // Format cost data in a cleaner way
+                $cheapest = isset($cost_data['cheapest_option']) 
+                    ? sprintf("%s/%s ($%.6f USD)", 
+                        $cost_data['cheapest_option']['provider'],
+                        $cost_data['cheapest_option']['model'],
+                        $cost_data['cheapest_option']['cost'])
+                    : 'N/A';
+                
+                $most_expensive = isset($cost_data['most_expensive_option'])
+                    ? sprintf("%s/%s ($%.6f USD)", 
+                        $cost_data['most_expensive_option']['provider'],
+                        $cost_data['most_expensive_option']['model'],
+                        $cost_data['most_expensive_option']['cost'])
+                    : 'N/A';
+
+                $cost_log = sprintf(
+                    "Cost calculation:\n" .
+                    "- Provider: %s\n" .
+                    "- Model: %s\n" .
+                    "- System tokens: %d\n" .
+                    "- Message tokens: %d\n" .
+                    "- Total input tokens: %d ($%.6f USD)\n" .
+                    "- Output tokens: %d ($%.6f USD)\n" .
+                    "- Total cost: $%.6f USD\n" .
+                    "Price comparison:\n" .
+                    "- Cheapest option: %s\n" .
+                    "- Most expensive option: %s",
+                    $cost_data['provider'],
+                    $cost_data['model'],
+                    $cost_data['system_tokens'] ?? 0,
+                    $cost_data['message_tokens'] ?? 0,
+                    $cost_data['input_tokens'],
+                    $cost_data['input_cost'],
+                    $cost_data['output_tokens'],
+                    $cost_data['output_cost'],
+                    $cost_data['total_cost'],
+                    $cheapest,
+                    $most_expensive
+                );
+                error_log("Multi-LLM Chatbot - $level: $cost_log");
+            } else {
+                error_log("Multi-LLM Chatbot - $level: $message");
+            }
         }
+    }
+
+    public function handle_cost_logging() {
+        if (!get_option('chatbot_debug_mode')) {
+            wp_die();
+        }
+
+        // Validate required fields
+        $required_fields = [
+            'provider', 'model', 'input_tokens', 'output_tokens', 
+            'input_cost', 'output_cost', 'total_cost', 
+            'system_tokens', 'message_tokens',
+            'cheapest_provider', 'cheapest_model', 'cheapest_cost',
+            'most_expensive_provider', 'most_expensive_model', 'most_expensive_cost'
+        ];
+        
+        foreach ($required_fields as $field) {
+            if (!isset($_POST[$field])) {
+                $this->log("Missing required field: $field", 'error');
+                wp_send_json_error("Missing required field: $field");
+                return;
+            }
+        }
+
+        $cost_data = [
+            'provider' => sanitize_text_field($_POST['provider']),
+            'model' => sanitize_text_field($_POST['model']),
+            'system_tokens' => intval($_POST['system_tokens']),
+            'message_tokens' => intval($_POST['message_tokens']),
+            'input_tokens' => intval($_POST['input_tokens']),
+            'output_tokens' => intval($_POST['output_tokens']),
+            'input_cost' => floatval($_POST['input_cost']),
+            'output_cost' => floatval($_POST['output_cost']),
+            'total_cost' => floatval($_POST['total_cost']),
+            'cheapest_option' => [
+                'provider' => sanitize_text_field($_POST['cheapest_provider']),
+                'model' => sanitize_text_field($_POST['cheapest_model']),
+                'cost' => floatval($_POST['cheapest_cost'])
+            ],
+            'most_expensive_option' => [
+                'provider' => sanitize_text_field($_POST['most_expensive_provider']),
+                'model' => sanitize_text_field($_POST['most_expensive_model']),
+                'cost' => floatval($_POST['most_expensive_cost'])
+            ]
+        ];
+
+        $this->log('Cost calculation:', 'info', $cost_data);
+        wp_send_json_success('Cost logged successfully');
     }
 }
 

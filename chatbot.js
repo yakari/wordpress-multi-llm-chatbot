@@ -133,6 +133,29 @@ document.addEventListener("DOMContentLoaded", function () {
         }
     });
 
+    // Add these utility functions
+    function countTokens(text) {
+        // Rough estimation: ~4 characters per token
+        return Math.ceil(text.length / 4);
+    }
+
+    function calculateCost(provider, model, inputTokens, outputTokens) {
+        const pricing = chatbot_ajax.modelPricing[provider]?.[model];
+        if (!pricing) {
+            console.debug('No pricing information available for', model);
+            return null;
+        }
+
+        // Convert pricing from per 1M tokens to per token
+        const inputCost = inputTokens * (pricing.input / 1000000);
+        const outputCost = outputTokens * (pricing.output / 1000000);
+        return {
+            input: inputCost,
+            output: outputCost,
+            total: inputCost + outputCost
+        };
+    }
+
     // Update sendMessage function to save history after each message
     function sendMessage() {
         const message = chatInput.value.trim();
@@ -188,6 +211,11 @@ document.addEventListener("DOMContentLoaded", function () {
         const loadingInterval = setInterval(updateLoadingDots, 500);
         let retryCount = 0;
         const maxRetries = 3;
+
+        // Track tokens for cost calculation
+        let totalInputTokens = countTokens(message);
+        let totalOutputTokens = 0;
+        let lastResponseMetadata = null;
 
         async function fetchStream() {
             if (retryCount >= maxRetries) {
@@ -279,6 +307,7 @@ document.addEventListener("DOMContentLoaded", function () {
                                 typingSpan.innerHTML = marked.parse(fullResponse);
                                 saveChatHistory();
                                 chatResponse.scrollTop = chatResponse.scrollHeight;
+                                lastResponseMetadata = data.metadata;
                             }
                         }
                     }
@@ -288,7 +317,95 @@ document.addEventListener("DOMContentLoaded", function () {
                 console.log(completeContent);
                 console.log('===============================');
 
-                // Add complete response to history only once at the end
+                // Calculate final cost only after the entire response is received
+                if (fullResponse && lastResponseMetadata) {
+                    // Include system prompt in input tokens if present
+                    const systemPrompt = chatbot_ajax.systemPrompt || '';
+                    const systemTokens = systemPrompt ? countTokens(systemPrompt) : 0;
+                    totalInputTokens = countTokens(message) + systemTokens;
+                    totalOutputTokens = countTokens(fullResponse);
+                    
+                    if (chatbot_ajax.debugMode) {
+                        const cost = calculateCost(
+                            lastResponseMetadata.provider,
+                            lastResponseMetadata.model,
+                            totalInputTokens,
+                            totalOutputTokens
+                        );
+                        
+                        if (cost) {
+                            // Calculate costs for all models
+                            const allCosts = [];
+                            for (const provider in chatbot_ajax.modelPricing) {
+                                for (const model in chatbot_ajax.modelPricing[provider]) {
+                                    const modelCost = calculateCost(provider, model, totalInputTokens, totalOutputTokens);
+                                    if (modelCost) {
+                                        allCosts.push({
+                                            provider,
+                                            model,
+                                            total: modelCost.total
+                                        });
+                                    }
+                                }
+                            }
+
+                            // Sort by cost
+                            allCosts.sort((a, b) => a.total - b.total);
+                            const cheapest = allCosts[0];
+                            const mostExpensive = allCosts[allCosts.length - 1];
+
+                            // Update console logging to show system tokens
+                            console.group('Chat Request Cost Summary');
+                            console.log(`Provider: ${lastResponseMetadata.provider}`);
+                            console.log(`Model: ${lastResponseMetadata.model}`);
+                            console.log(`System tokens: ${systemTokens}`);
+                            console.log(`Message tokens: ${countTokens(message)}`);
+                            console.log(`Total input tokens: ${totalInputTokens} (${cost.input.toFixed(6)} USD)`);
+                            console.log(`Output tokens: ${totalOutputTokens} (${cost.output.toFixed(6)} USD)`);
+                            console.log(`Total cost: ${cost.total.toFixed(6)} USD`);
+                            console.log('\nPrice Comparison:');
+                            console.log(`Cheapest: ${cheapest.provider}/${cheapest.model} ($${cheapest.total.toFixed(6)} USD)`);
+                            console.log(`Most expensive: ${mostExpensive.provider}/${mostExpensive.model} ($${mostExpensive.total.toFixed(6)} USD)`);
+                            console.groupEnd();
+
+                            // Send to server for logging
+                            if (lastResponseMetadata.cost_tracking) {
+                                const requestData = {
+                                    action: 'chatbot_log_cost',
+                                    provider: lastResponseMetadata.provider,
+                                    model: lastResponseMetadata.model,
+                                    input_tokens: totalInputTokens,
+                                    output_tokens: totalOutputTokens,
+                                    input_cost: cost.input,
+                                    output_cost: cost.output,
+                                    total_cost: cost.total,
+                                    system_tokens: systemTokens,
+                                    message_tokens: countTokens(message),
+                                    cheapest_provider: cheapest.provider,
+                                    cheapest_model: cheapest.model,
+                                    cheapest_cost: cheapest.total,
+                                    most_expensive_provider: mostExpensive.provider,
+                                    most_expensive_model: mostExpensive.model,
+                                    most_expensive_cost: mostExpensive.total,
+                                    _wpnonce: chatbot_ajax.nonce
+                                };
+
+                                fetch(chatbot_ajax.ajaxurl, {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/x-www-form-urlencoded',
+                                    },
+                                    body: new URLSearchParams(requestData)
+                                })
+                                .then(response => response.json())
+                                .then(data => console.log('Cost logging response:', data))
+                                .catch(error => console.error('Error logging cost:', error));
+                            }
+                        }
+                    }
+                }
+
+                // Add complete response to history
                 if (fullResponse) {
                     addToHistory('assistant', fullResponse);
                 }
