@@ -2,6 +2,13 @@
 
 All notable changes to the Multi-LLM Chatbot plugin will be documented in this file.
 
+## [1.33.0] - 2024-02-24
+### Fixed
+- Fixed Claude API integration with proper message formatting
+- Updated Claude model to claude-3-haiku-20240307
+- Added proper streaming response handling for Claude
+- Fixed token counting for Claude responses
+
 ## [1.32.0] - 2024-02-24
 ### Changed
 - Fixed pricing calculations to use per 1M tokens instead of per 1K tokens

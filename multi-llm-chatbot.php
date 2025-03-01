@@ -3,7 +3,7 @@
  * Plugin Name: Multi-LLM Chatbot
  * Plugin URI: https://github.com/yakari/wordpress-multi-llm-chatbot
  * Description: Plugin WordPress pour intégrer un chatbot compatible avec OpenAI, Claude, Perplexity, Google Gemini et Mistral.
- * Version: 1.32.0
+ * Version: 1.33.0
  * Author: Yann Poirier <yakari@yakablog.info>
  * Author URI: https://foliesenbaie.fr
  * License: Apache-2.0
@@ -859,9 +859,20 @@ class MultiLLMChatbot {
                     'anthropic-version: 2023-06-01',
                     'Content-Type: application/json'
                 ];
+                
+                // Claude expects a different message format
+                $formatted_messages = array_map(function($msg) {
+                    return [
+                        'role' => $msg['role'] === 'assistant' ? 'assistant' : 'user',
+                        'content' => $msg['content']
+                    ];
+                }, $messages);
+                
                 $body = json_encode([
-                    'model' => 'claude-3-opus-20240229',
-                    'messages' => $messages,
+                    'model' => 'claude-3-haiku-20240307',
+                    'messages' => $formatted_messages,
+                    'max_tokens' => 1000,
+                    'temperature' => 0.7,
                     'stream' => true
                 ]);
                 break;
@@ -1038,7 +1049,8 @@ class MultiLLMChatbot {
                 case 'mistral':
                     return $decoded['choices'][0]['delta']['content'] ?? null;
                 case 'claude':
-                    return $decoded['delta']['text'] ?? null;
+                    return $decoded['type'] === 'content_block_delta' ? 
+                        ($decoded['delta']['text'] ?? null) : null;
                 case 'perplexity':
                     return $decoded['choices'][0]['delta']['content'] ?? null;
                 case 'gemini':
