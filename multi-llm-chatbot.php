@@ -112,16 +112,45 @@ class MultiLLMChatbot {
         // Get saved models with pricing from database
         $openai_models = get_option('chatbot_openai_models', [
             // Default OpenAI models if none saved
-            'gpt-4-turbo-preview' => ['input' => 0.01, 'output' => 0.03],
-            'gpt-4' => ['input' => 0.03, 'output' => 0.06],
-            'gpt-3.5-turbo' => ['input' => 0.0005, 'output' => 0.0015]
+            // Latest GPT-4 and variants
+            'gpt-4o' => [ 'input' =>  2.50, 'output' =>  10.00 ],
+            'gpt-4o-mini' => [ 'input' =>  0.15, 'output' =>  0.60 ],
+            'o1' => [ 'input' =>  15.00, 'output' =>  60.00 ],
+            'o1-mini' => [ 'input' =>  1.10, 'output' =>  4.40 ],
+            'o3-mini' => [ 'input' =>  1.10, 'output' =>  4.40 ],
+            
+            // Legacy models
+            'gpt-4-turbo-preview' => [ 'input' =>  0.01, 'output' =>  0.03 ],
+            'gpt-4' => [ 'input' =>  0.03, 'output' =>  0.06 ],
+            'gpt-4-32k' => [ 'input' =>  0.06, 'output' =>  0.12 ],
+            'gpt-3.5-turbo' => [ 'input' =>  0.0005, 'output' =>  0.0015 ],
+            'gpt-3.5-turbo-16k' => [ 'input' =>  0.003, 'output' =>  0.004 ]
         ]);
         
         $mistral_models = get_option('chatbot_mistral_models', [
             // Default Mistral models if none saved
-            'mistral-large-latest' => ['input' => 2.0, 'output' => 6.0],
-            'mistral-medium' => ['input' => 0.6, 'output' => 1.8],
-            'mistral-small' => ['input' => 0.14, 'output' => 0.42]
+            // Premier models
+            'mistral-large-latest' => [ 'input' => 2.0, 'output' => 6.0 ],
+            'mistral-small-latest'=> [ 'input' => 0.1, 'output' => 0.3 ],
+            'mistral-embed' => [ 'input' => 0.1, 'output' => 0 ],
+            'mistral-saba' => [ 'input' => 0.2, 'output' => 0.6 ],
+            'codestral' => [ 'input' => 0.3, 'output' => 0.9 ],
+            'ministral-8b' => [ 'input' => 0.1, 'output' => 0.1 ],
+            'ministral-3b' => [ 'input' => 0.04, 'output' => 0.04 ],
+            // Free/Open models
+            'open-mistral-nemo' => [ 'input' => 0.15, 'output' => 0.15 ],
+            'open-mistral-7b' => [ 'input' => 0.25, 'output' => 0.25 ],
+            'open-mixtral-8x7b' => [ 'input' => 0.7, 'output' => 0.7 ]
+        ]);
+
+        $claude_models = get_option('chatbot_claude_models', [
+            // Default Claude models with pricing per million tokens
+            'claude-3-7-sonnet-20250219' => ['input' => 3.00, 'output' => 15.00],
+            'claude-3-5-haiku-20241022' => ['input' => 0.80, 'output' => 4.00],
+            'claude-3-5-sonnet-20241022' => ['input' => 3.00, 'output' => 15.00],
+            'claude-3-opus-20240229' => ['input' => 15.00, 'output' => 75.00],
+            'claude-3-sonnet-20240229' => ['input' => 3.00, 'output' => 15.00],
+            'claude-3-haiku-20240307' => ['input' => 0.25, 'output' => 1.25]
         ]);
 
         $script_data = [
@@ -129,7 +158,8 @@ class MultiLLMChatbot {
             'debugMode' => get_option('chatbot_debug_mode') === '1',
             'modelPricing' => [
                 'openai' => $openai_models,
-                'mistral' => $mistral_models
+                'mistral' => $mistral_models,
+                'claude' => $claude_models
             ],
             'currentProvider' => get_option('chatbot_provider', 'openai'),
             'currentModel' => get_option('chatbot_' . get_option('chatbot_provider', 'openai') . '_model', 'gpt-4-turbo-preview'),
@@ -331,8 +361,10 @@ class MultiLLMChatbot {
         // Assistant/Agent fields for supported providers
         if (in_array($provider_key, ['openai', 'mistral'])) {
             $this->render_assistant_fields($provider_key, $provider_name, $current_provider);
-            
-            // Model selection field right after API choice
+        }
+        
+        // Model selection field for providers that support it
+        if (in_array($provider_key, ['openai', 'mistral', 'claude'])) {
             $this->render_model_selection_field($provider_key, $current_provider);
         }
     }
@@ -853,7 +885,7 @@ class MultiLLMChatbot {
                 
             case 'claude':
                 $url = 'https://api.anthropic.com/v1/messages';
-                // Add Anthropic-specific headers
+                $model = get_option('chatbot_claude_model', 'claude-3-haiku-20240307');
                 $headers = [
                     'x-api-key: ' . $api_key,
                     'anthropic-version: 2023-06-01',
@@ -869,7 +901,7 @@ class MultiLLMChatbot {
                 }, $messages);
                 
                 $body = json_encode([
-                    'model' => 'claude-3-haiku-20240307',
+                    'model' => $model,
                     'messages' => $formatted_messages,
                     'max_tokens' => 1000,
                     'temperature' => 0.7,

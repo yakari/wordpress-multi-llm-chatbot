@@ -249,4 +249,25 @@ jQuery(document).ready(function($) {
         
         // Existing code for assistant fields...
     });
+
+    // Add Claude models with pricing
+    const defaultClaudeModels = {
+        'claude-3-7-sonnet-20250219': { input: 3.00, output: 15.00 },
+        'claude-3-5-haiku-20241022': { input: 0.80, output: 4.00 },
+        'claude-3-5-sonnet-20241022': { input: 3.00, output: 15.00 },
+        'claude-3-opus-20240229': { input: 15.00, output: 75.00 },
+        'claude-3-sonnet-20240229': { input: 3.00, output: 15.00 },
+        'claude-3-haiku-20240307': { input: 0.25, output: 1.25 }
+    };
+
+    // In the model selection field rendering
+    if (provider_key === 'claude') {
+        // Add Claude model options with pricing
+        const claudeModels = get_option('chatbot_claude_models', defaultClaudeModels);
+        Object.entries(claudeModels).forEach(([model, pricing]) => {
+            const inputPrice = (pricing.input / 1000).toFixed(3);
+            const outputPrice = (pricing.output / 1000).toFixed(3);
+            options += `<option value="${model}">${model} ($${inputPrice} / $${outputPrice} per 1K tokens)</option>`;
+        });
+    }
 }); 
