@@ -40,6 +40,9 @@ class MultiLLMChatbot {
         add_action('wp_ajax_chatbot_log_cost', [$this, 'handle_cost_logging']);
         add_action('wp_ajax_nopriv_chatbot_log_cost', [$this, 'handle_cost_logging']);
 
+        // Add this to __construct
+        add_action('admin_init', [$this, 'reset_model_lists']);
+
         $this->log('Multi-LLM Chatbot initialized');
     }
 
@@ -76,11 +79,15 @@ class MultiLLMChatbot {
         foreach ($providers as $provider) {
             register_setting('multi_llm_chatbot_settings', "chatbot_{$provider}_api_key");
             
+            // Add model selection for supported providers
+            if (in_array($provider, ['openai', 'mistral', 'claude'])) {
+                register_setting('multi_llm_chatbot_settings', "chatbot_{$provider}_model");
+            }
+            
             // Special settings for providers with assistant/agent capabilities
             if (in_array($provider, ['openai', 'mistral'])) {
                 register_setting('multi_llm_chatbot_settings', "chatbot_{$provider}_assistant_id");
                 register_setting('multi_llm_chatbot_settings', "chatbot_{$provider}_use_assistant");
-                register_setting('multi_llm_chatbot_settings', "chatbot_{$provider}_model");
             }
         }
 
@@ -109,50 +116,14 @@ class MultiLLMChatbot {
             true
         );
         
-        // Get saved models with pricing from database
-        $openai_models = get_option('chatbot_openai_models', [
-            // Default OpenAI models if none saved
-            // Latest GPT-4 and variants
-            'gpt-4o' => [ 'input' =>  2.50, 'output' =>  10.00 ],
-            'gpt-4o-mini' => [ 'input' =>  0.15, 'output' =>  0.60 ],
-            'o1' => [ 'input' =>  15.00, 'output' =>  60.00 ],
-            'o1-mini' => [ 'input' =>  1.10, 'output' =>  4.40 ],
-            'o3-mini' => [ 'input' =>  1.10, 'output' =>  4.40 ],
-            
-            // Legacy models
-            'gpt-4-turbo-preview' => [ 'input' =>  0.01, 'output' =>  0.03 ],
-            'gpt-4' => [ 'input' =>  0.03, 'output' =>  0.06 ],
-            'gpt-4-32k' => [ 'input' =>  0.06, 'output' =>  0.12 ],
-            'gpt-3.5-turbo' => [ 'input' =>  0.0005, 'output' =>  0.0015 ],
-            'gpt-3.5-turbo-16k' => [ 'input' =>  0.003, 'output' =>  0.004 ]
-        ]);
+        // Get default models
+        $default_models = $this->get_default_models();
         
-        $mistral_models = get_option('chatbot_mistral_models', [
-            // Default Mistral models if none saved
-            // Premier models
-            'mistral-large-latest' => [ 'input' => 2.0, 'output' => 6.0 ],
-            'mistral-small-latest'=> [ 'input' => 0.1, 'output' => 0.3 ],
-            'mistral-embed' => [ 'input' => 0.1, 'output' => 0 ],
-            'mistral-saba' => [ 'input' => 0.2, 'output' => 0.6 ],
-            'codestral' => [ 'input' => 0.3, 'output' => 0.9 ],
-            'ministral-8b' => [ 'input' => 0.1, 'output' => 0.1 ],
-            'ministral-3b' => [ 'input' => 0.04, 'output' => 0.04 ],
-            // Free/Open models
-            'open-mistral-nemo' => [ 'input' => 0.15, 'output' => 0.15 ],
-            'open-mistral-7b' => [ 'input' => 0.25, 'output' => 0.25 ],
-            'open-mixtral-8x7b' => [ 'input' => 0.7, 'output' => 0.7 ]
-        ]);
-
-        $claude_models = get_option('chatbot_claude_models', [
-            // Default Claude models with pricing per million tokens
-            'claude-3-7-sonnet-20250219' => ['input' => 3.00, 'output' => 15.00],
-            'claude-3-5-haiku-20241022' => ['input' => 0.80, 'output' => 4.00],
-            'claude-3-5-sonnet-20241022' => ['input' => 3.00, 'output' => 15.00],
-            'claude-3-opus-20240229' => ['input' => 15.00, 'output' => 75.00],
-            'claude-3-sonnet-20240229' => ['input' => 3.00, 'output' => 15.00],
-            'claude-3-haiku-20240307' => ['input' => 0.25, 'output' => 1.25]
-        ]);
-
+        // Get saved models with pricing from database
+        $openai_models = get_option('chatbot_openai_models', $default_models['openai']);
+        $mistral_models = get_option('chatbot_mistral_models', $default_models['mistral']);
+        $claude_models = get_option('chatbot_claude_models', $default_models['claude']);
+        
         $script_data = [
             'ajaxurl' => admin_url('admin-ajax.php'),
             'debugMode' => get_option('chatbot_debug_mode') === '1',
@@ -399,55 +370,62 @@ class MultiLLMChatbot {
 
     /**
      * Renders the model selection field for supported providers
-     * Displays available models with pricing information and fetching capability
      * 
-     * @since 1.30.0
-     * @access private
-     * @param string $provider_key Provider identifier (openai or mistral)
+     * @param string $provider_key Provider identifier
      * @param string $current_provider Currently selected provider
-     * @return void
      */
     private function render_model_selection_field($provider_key, $current_provider) {
+        // Set default model if none is selected
+        $default_model = '';
+        if ($provider_key === 'openai') {
+            $default_model = 'gpt-4-turbo-preview';
+        } elseif ($provider_key === 'mistral') {
+            $default_model = 'mistral-large-latest';
+        } elseif ($provider_key === 'claude') {
+            $default_model = 'claude-3-haiku-20240307';
+        }
+        
         $use_assistant = get_option("chatbot_{$provider_key}_use_assistant", '');
-        $default_model = $provider_key === 'openai' ? 'gpt-4-turbo-preview' : 'mistral-large-latest';
         $selected_model = get_option("chatbot_{$provider_key}_model", $default_model);
-        $available_models = get_option("chatbot_{$provider_key}_available_models", []);
         
         // Generate unique ID for the model selection field
         $field_id = "model-selection-{$provider_key}";
+        
+        // For Claude, we don't want to hide this based on assistant mode since it doesn't support assistants
+        $display_style = '';
+        if ($current_provider !== $provider_key) {
+            $display_style = 'display: none;';
+        } elseif ($provider_key !== 'claude' && $use_assistant) {
+            $display_style = 'display: none;';
+        }
+        
+        // Get models from the central source
+        $default_models = $this->get_default_models();
+        $models = $default_models[$provider_key] ?? [];
+        
         ?>
         <tr class="model-selection-field" id="<?php echo esc_attr($field_id); ?>" data-provider="<?php echo esc_attr($provider_key); ?>"
-            style="<?php echo $current_provider === $provider_key && !$use_assistant ? '' : 'display: none;'; ?>">
-            <th scope="row">Model</th>
+            style="<?php echo $display_style; ?>">
+            <th scope="row"><?php echo ucfirst($provider_key); ?> Model</th>
             <td>
                 <select name="chatbot_<?php echo esc_attr($provider_key); ?>_model" 
-                        id="<?php echo esc_attr($provider_key); ?>-model-select"
-                        class="regular-text">
-                    <?php if ($provider_key === 'openai'): ?>
-                    <option value="gpt-4-turbo-preview" <?php selected($selected_model, 'gpt-4-turbo-preview'); ?>>GPT-4 Turbo (1¢ / 3¢ per 1K tokens)</option>
-                    <option value="gpt-4" <?php selected($selected_model, 'gpt-4'); ?>>GPT-4 (3¢ / 6¢ per 1K tokens)</option>
-                    <option value="gpt-3.5-turbo" <?php selected($selected_model, 'gpt-3.5-turbo'); ?>>GPT-3.5 Turbo (0.05¢ / 0.15¢ per 1K tokens)</option>
-                    <?php else: ?>
-                    <option value="mistral-large-latest" <?php selected($selected_model, 'mistral-large-latest'); ?>>Mistral Large (2.5¢ / 7.5¢ per 1K tokens)</option>
-                    <option value="mistral-medium" <?php selected($selected_model, 'mistral-medium'); ?>>Mistral Medium (0.6¢ / 1.8¢ per 1K tokens)</option>
-                    <option value="mistral-small" <?php selected($selected_model, 'mistral-small'); ?>>Mistral Small (0.14¢ / 0.42¢ per 1K tokens)</option>
-                    <?php endif; ?>
+                       id="<?php echo esc_attr($provider_key); ?>-model-select"
+                       class="regular-text">
                     <?php
-                    // Add any additional models from the database
-                    foreach ($available_models as $model_id => $pricing) {
-                        if (!in_array($model_id, ['gpt-4-turbo-preview', 'gpt-4', 'gpt-3.5-turbo', 'mistral-large-latest', 'mistral-medium', 'mistral-small'])) {
-                            echo sprintf(
-                                '<option value="%s" %s>%s</option>',
-                                esc_attr($model_id),
-                                selected($selected_model, $model_id, false),
-                                esc_html($model_id)
-                            );
-                        }
+                    foreach ($models as $model_id => $pricing) {
+                        $selected = $selected_model === $model_id ? 'selected' : '';
+                        $price_info = sprintf(
+                            '($%.3f / $%.3f per 1M tokens)',
+                            $pricing['input'],
+                            $pricing['output']
+                        );
+                        echo "<option value='" . esc_attr($model_id) . "' $selected>" . 
+                             esc_html($model_id . ' ' . $price_info) . 
+                             "</option>";
                     }
                     ?>
                 </select>
-                <button type="button" id="fetch-models-<?php echo esc_attr($provider_key); ?>" class="button fetch-models">Fetch Available Models</button>
-                <p class="description">Select the <?php echo ucfirst($provider_key); ?> model to use. Prices shown as (input cost / output cost) per 1,000 tokens.</p>
+                <p class="description">Select the model to use for chat completions. Prices shown as (input cost / output cost) per 1,000 tokens.</p>
             </td>
         </tr>
         <?php
@@ -1589,6 +1567,67 @@ class MultiLLMChatbot {
 
         $this->log('Cost calculation:', 'info', $cost_data);
         wp_send_json_success('Cost logged successfully');
+    }
+
+    /**
+     * Reset model lists to use hardcoded values
+     */
+    public function reset_model_lists() {
+        // Clear saved models in database
+        delete_option('chatbot_openai_models');
+        delete_option('chatbot_mistral_models');
+        delete_option('chatbot_claude_models');
+        
+        // Get default models
+        $default_models = $this->get_default_models();
+        
+        // Update options with defaults
+        update_option('chatbot_openai_models', $default_models['openai']);
+        update_option('chatbot_mistral_models', $default_models['mistral']);
+        update_option('chatbot_claude_models', $default_models['claude']);
+    }
+
+    /**
+     * Defines the default models and their pricing for each provider
+     * This is now the single source of truth for model information
+     * 
+     * @return array Array of provider models with pricing information
+     */
+    private function get_default_models() {
+        return [
+            'openai' => [
+                'gpt-4o' => ['input' => 2.50, 'output' => 10.00],
+                'gpt-4o-mini' => ['input' => 0.15, 'output' => 0.60],
+                'o1' => ['input' => 15.00, 'output' => 60.00],
+                'o1-mini' => ['input' => 1.10, 'output' => 4.40],
+                'o3-mini' => ['input' => 1.10, 'output' => 4.40],
+                'gpt-4-turbo-preview' => ['input' => 0.01, 'output' => 0.03],
+                'gpt-4' => ['input' => 0.03, 'output' => 0.06],
+                'gpt-4-32k' => ['input' => 0.06, 'output' => 0.12],
+                'gpt-3.5-turbo' => ['input' => 0.0005, 'output' => 0.0015],
+                'gpt-3.5-turbo-16k' => ['input' => 0.003, 'output' => 0.004]
+            ],
+            'mistral' => [
+                'mistral-large-latest' => ['input' => 2.0, 'output' => 6.0],
+                'mistral-small-latest' => ['input' => 0.1, 'output' => 0.3],
+                'mistral-embed' => ['input' => 0.1, 'output' => 0],
+                'mistral-saba' => ['input' => 0.2, 'output' => 0.6],
+                'codestral' => ['input' => 0.3, 'output' => 0.9],
+                'ministral-8b' => ['input' => 0.1, 'output' => 0.1],
+                'ministral-3b' => ['input' => 0.04, 'output' => 0.04],
+                'open-mistral-nemo' => ['input' => 0.15, 'output' => 0.15],
+                'open-mistral-7b' => ['input' => 0.25, 'output' => 0.25],
+                'open-mixtral-8x7b' => ['input' => 0.7, 'output' => 0.7]
+            ],
+            'claude' => [
+                'claude-3-7-sonnet-20250219' => ['input' => 3.00, 'output' => 15.00],
+                'claude-3-5-haiku-20241022' => ['input' => 0.80, 'output' => 4.00],
+                'claude-3-5-sonnet-20241022' => ['input' => 3.00, 'output' => 15.00],
+                'claude-3-opus-20240229' => ['input' => 15.00, 'output' => 75.00],
+                'claude-3-sonnet-20240229' => ['input' => 3.00, 'output' => 15.00],
+                'claude-3-haiku-20240307' => ['input' => 0.25, 'output' => 1.25]
+            ]
+        ];
     }
 }
 
