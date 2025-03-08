@@ -9,6 +9,28 @@ jQuery(document).ready(function($) {
         // Keep error and warn for critical issues
     }
 
+    // Initialize EasyMDE if the element exists
+    if (document.getElementById('chatbot-markdown-editor')) {
+        const easyMDE = new EasyMDE({
+            element: document.getElementById('chatbot-markdown-editor'),
+            spellChecker: false,
+            autosave: {
+                enabled: true,
+                uniqueId: 'chatbot-markdown-editor',
+                delay: 1000,
+            },
+            toolbar: [
+                'bold', 'italic', 'heading', '|',
+                'code', 'quote', 'unordered-list', 'ordered-list', '|',
+                'link', 'image', 'table', '|',
+                'preview', 'side-by-side', 'fullscreen', '|',
+                'guide'
+            ],
+            placeholder: "Enter instructions for the AI using markdown...",
+            status: ['autosave', 'lines', 'words', 'cursor']
+        });
+    }
+
     // Handle provider switching for definition fields
     $('#chatbot_provider').on('change', function() {
         const provider = $(this).val();

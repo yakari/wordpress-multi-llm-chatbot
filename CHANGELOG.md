@@ -2,6 +2,12 @@
 
 All notable changes to the Multi-LLM Chatbot plugin will be documented in this file.
 
+## [1.34.0] - 2024-02-25
+### Added
+- WYSIWYG markdown editor for AI instructions
+- Improved formatting capabilities for system prompts
+- Visual markdown editing with preview functionality
+
 ## [1.33.0] - 2024-02-24
 ### Fixed
 - Fixed Claude API integration with proper message formatting

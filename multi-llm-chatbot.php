@@ -3,7 +3,7 @@
  * Plugin Name: Multi-LLM Chatbot
  * Plugin URI: https://github.com/yakari/wordpress-multi-llm-chatbot
  * Description: Plugin WordPress pour intégrer un chatbot compatible avec OpenAI, Claude, Perplexity, Google Gemini et Mistral.
- * Version: 1.33.0
+ * Version: 1.34.0
  * Author: Yann Poirier <yakari@yakablog.info>
  * Author URI: https://foliesenbaie.fr
  * License: Apache-2.0
@@ -144,8 +144,7 @@ class MultiLLMChatbot {
     }
 
     /**
-     * Enqueue admin scripts and styles
-     * Loads required JavaScript files for the admin interface
+     * Enqueues admin scripts and styles
      * 
      * @since 1.0.0
      * @access public
@@ -153,32 +152,45 @@ class MultiLLMChatbot {
      * @return void
      */
     public function enqueue_admin_scripts($hook) {
-        // Only load on plugin settings page
+        $this->log("Admin page hook: " . $hook);
+        
+        // Only load on our plugin settings page
         if ($hook !== 'toplevel_page_multi_llm_chatbot') {
             return;
         }
-
+        
+        // Add EasyMDE scripts and styles
         wp_enqueue_script(
-            'chatbot-admin', 
-            plugin_dir_url(__FILE__) . 'admin.js', 
-            ['jquery'], 
-            '1.0', 
+            'easymde', 
+            'https://cdn.jsdelivr.net/npm/easymde/dist/easymde.min.js', 
+            array('jquery'), 
+            '2.18.0', 
             true
         );
-
-        $saved_models = array(
-            'openai' => get_option('chatbot_openai_models', array()),
-            'mistral' => get_option('chatbot_mistral_models', array())
+        wp_enqueue_style(
+            'easymde', 
+            'https://cdn.jsdelivr.net/npm/easymde/dist/easymde.min.css', 
+            array(), 
+            '2.18.0'
         );
-
-        wp_localize_script('chatbot-admin', 'chatbotAdmin', array(
-            'ajaxurl' => admin_url('admin-ajax.php'),
-            'nonce' => wp_create_nonce('chatbot_admin_nonce'),
-            'debugMode' => defined('WP_DEBUG') && WP_DEBUG,
-            'savedModels' => $saved_models
-        ));
-
-        $this->log('Multi-LLM Chatbot admin scripts enqueued');
+        
+        // Admin script
+        wp_enqueue_script(
+            'multi-llm-chatbot-admin', 
+            plugin_dir_url(__FILE__) . 'admin.js', 
+            array('jquery', 'easymde'), 
+            '1.0.0', 
+            true
+        );
+        
+        // Data for admin script
+        $script_data = [
+            'debugMode' => get_option('chatbot_debug_mode') === '1',
+            'nonce' => wp_create_nonce('chatbot_admin_nonce')
+        ];
+        wp_localize_script('multi-llm-chatbot-admin', 'chatbotAdmin', $script_data);
+        
+        $this->log('Admin scripts enqueued successfully');
     }
 
     /**
@@ -489,15 +501,15 @@ class MultiLLMChatbot {
 
     /**
      * Renders the shared definition/instructions field
-     * Displays the textarea for AI behavior instructions
+     * Displays the textarea for AI behavior instructions with markdown editor
      * 
-     * @since 1.31.0
+     * @since 1.34.0
      * @access private
      * @param string $current_provider Currently selected provider
      * @return void
      */
     private function render_definition_field($current_provider) {
-        $this->log("Rendering definition field");
+        $this->log("Rendering definition field with markdown editor");
         $definition = get_option("chatbot_definition", '');
         $use_assistant = get_option("chatbot_{$current_provider}_use_assistant", '');
         ?>
@@ -506,15 +518,16 @@ class MultiLLMChatbot {
             <th scope="row">Instructions</th>
             <td>
                 <textarea 
+                    id="chatbot-markdown-editor"
                     name="chatbot_definition"
-                    rows="10"
+                    rows="12"
                     class="large-text code"
                     placeholder="Enter instructions for the AI..."
                 ><?php echo esc_textarea($definition); ?></textarea>
                 <p class="description">
                     <?php echo $use_assistant ? 
                         'Instructions are managed through the provider\'s interface in Assistant/Agent mode' : 
-                        'Define how the AI should behave and what capabilities it should have'; ?>
+                        'Define how the AI should behave and what capabilities it should have. <strong>Use markdown to format your instructions.</strong>'; ?>
                 </p>
             </td>
         </tr>
