@@ -2,6 +2,19 @@
 
 All notable changes to the Multi-LLM Chatbot plugin will be documented in this file.
 
+## [1.37.0] - 2024-02-25
+### Fixed
+- Fixed excess spacing (106px) at top of mobile view
+- Reduced header height on mobile to 50px (from 60px)
+- Improved spacing calculations for better mobile layout
+- Adjusted padding in header and input container for better spacing
+
+## [1.36.0] - 2024-02-25
+### Fixed
+- Fixed Mistral integration issue where first few characters were missing from responses
+- Improved response stream handling for Mistral API with proper buffering
+- Added better debugging of first chunk from Mistral responses
+
 ## [1.35.0] - 2024-02-25
 ### Fixed
 - Fixed mobile viewport issues with virtual keyboard

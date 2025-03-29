@@ -322,7 +322,7 @@ code {
         left: 0;
         right: 0;
         background: white;
-        padding: 15px;
+        padding: 10px 15px;
         border-bottom: 1px solid #ddd;
         z-index: 100001;
         margin: 0;
@@ -330,12 +330,12 @@ code {
         justify-content: space-between;
         align-items: center;
         flex-shrink: 0;
-        height: 60px;
+        height: 50px;
     }
 
     #chat-response {
         position: absolute;
-        top: 60px;
+        top: 50px;
         bottom: 60px;
         left: 0;
         right: 0;
@@ -346,20 +346,7 @@ code {
         border: none;
         border-radius: 0;
         margin: 0;
-        height: calc(100% - 120px); /* Account for header and input container */
-    }
-
-    /* Adjust for WordPress admin bar */
-    .admin-bar #chat-response {
-        top: 92px; /* 32px admin bar + 60px header */
-        height: calc(100% - 152px); /* Account for admin bar, header and input container */
-    }
-
-    @media screen and (max-width: 782px) {
-        .admin-bar #chat-response {
-            top: 106px; /* 46px admin bar + 60px header */
-            height: calc(100% - 166px); /* Account for admin bar, header and input container */
-        }
+        height: calc(100% - 110px);
     }
 
     .chat-input-container {
@@ -368,7 +355,7 @@ code {
         left: 0;
         right: 0;
         background: white;
-        padding: 15px;
+        padding: 10px 15px;
         z-index: 100001;
         display: flex;
         align-items: center;

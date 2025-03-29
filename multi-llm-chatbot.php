@@ -3,7 +3,7 @@
  * Plugin Name: Multi-LLM Chatbot
  * Plugin URI: https://github.com/yakari/wordpress-multi-llm-chatbot
  * Description: Plugin WordPress pour intégrer un chatbot compatible avec OpenAI, Claude, Perplexity, Google Gemini et Mistral.
- * Version: 1.35.0
+ * Version: 1.37.0
  * Author: Yann Poirier <yakari@yakablog.info>
  * Author URI: https://foliesenbaie.fr
  * License: Apache-2.0
@@ -1302,20 +1302,67 @@ class MultiLLMChatbot {
         $this->log("================");
         
         $complete_content = '';
+        $is_first_chunk = true;  // Track if this is the first chunk for Mistral
+        $buffer = '';  // Buffer to collect partial chunks
+        
         $ch = curl_init($url);
         curl_setopt_array($ch, [
             CURLOPT_POST => true,
             CURLOPT_POSTFIELDS => $body,
             CURLOPT_HTTPHEADER => $headers,
             CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_WRITEFUNCTION => function($curl, $data) use ($provider, &$complete_content) {
-                if (strpos($data, 'data: ') === 0) {
-                    $json = json_decode(substr($data, 6), true);
-                    if ($json && isset($json['choices'][0]['delta']['content'])) {
-                        $complete_content .= $json['choices'][0]['delta']['content'];
+            CURLOPT_WRITEFUNCTION => function($curl, $data) use ($provider, &$complete_content, &$is_first_chunk, &$buffer) {
+                // Special handling for Mistral's responses
+                if ($provider === 'mistral') {
+                    $buffer .= $data;
+                    $lines = explode("\n", $buffer);
+                    $buffer = array_pop($lines); // Keep the last line which might be incomplete
+                    
+                    foreach ($lines as $line) {
+                        if (strpos($line, 'data: ') === 0) {
+                            $jsonData = substr($line, 6);
+                            if ($jsonData === '[DONE]') continue;
+                            
+                            try {
+                                $decoded = json_decode($jsonData, true);
+                                if ($decoded && isset($decoded['choices'][0]['delta']['content'])) {
+                                    $content = $decoded['choices'][0]['delta']['content'];
+                                    if ($is_first_chunk) {
+                                        $this->log("First chunk from Mistral: " . $content);
+                                        $is_first_chunk = false;
+                                    }
+                                    $complete_content .= $content;
+                                    
+                                    echo "data: " . json_encode([
+                                        'content' => $content,
+                                        'metadata' => [
+                                            'provider' => $provider,
+                                            'model' => get_option("chatbot_{$provider}_model"),
+                                            'cost_tracking' => true
+                                        ]
+                                    ]) . "\n\n";
+                                    if (ob_get_level() > 0) {
+                                        ob_flush();
+                                    }
+                                    flush();
+                                }
+                            } catch (Exception $e) {
+                                $this->log('Error parsing Mistral JSON: ' . $e->getMessage(), 'error');
+                            }
+                        }
                     }
+                    
+                    return strlen($data);
+                } else {
+                    // Standard handling for other providers
+                    if (strpos($data, 'data: ') === 0) {
+                        $json = json_decode(substr($data, 6), true);
+                        if ($json && isset($json['choices'][0]['delta']['content'])) {
+                            $complete_content .= $json['choices'][0]['delta']['content'];
+                        }
+                    }
+                    return $this->handle_streaming_response($data, $provider);
                 }
-                return $this->handle_streaming_response($data, $provider);
             },
             CURLOPT_FAILONERROR => true,
             CURLOPT_SSL_VERIFYPEER => true,
